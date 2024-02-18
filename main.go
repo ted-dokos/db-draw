@@ -41,18 +41,34 @@ func (d Database) tojs() js.Value {
 	})
 }
 
+type SimulationState struct {
+	databases []Database
+}
+
+func (s SimulationState) tojs() js.Value {
+	var x []interface{}
+	for i := 0; i < len(s.databases); i++ {
+		x = append(x, s.databases[i].tojs())
+	}
+	return js.ValueOf(map[string]interface{}{
+		"databases": js.ValueOf(x),
+	})
+}
+
 func main() {
 	var i int32 = 1
 	for {
 		ang := float64(i) * math.Pi / 180.0
 		d := Database{pos: Position{x: math.Cos(ang), y: math.Sin(ang)}}
+		d2 := Database{pos: Position{x: 0.0, y: 0.0}}
+		sim := SimulationState{databases: []Database{d, d2}}
 		storeInJs := func(this js.Value, args []js.Value) any {
-			return d.tojs()
+			return sim.tojs()
 		}
 		js.Global().Set("callback", js.FuncOf(storeInJs))
 		JsDo()
 		fmt.Println(i)
 		i++
-		time.Sleep(time.Second)
+		time.Sleep(16 * time.Millisecond)
 	}
 }
