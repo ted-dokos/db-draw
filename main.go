@@ -100,20 +100,39 @@ func (s SimulationState) tojs() js.Value {
 	})
 }
 
+func update(tick uint, s SimulationState) {
+	ang := float64(tick) * math.Pi / 180.0
+	s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
+}
+
+const TICKS_PER_SECOND = 100.0
+const TIME_PER_TICK = time.Second / TICKS_PER_SECOND
+
 func main() {
-	var i int32 = 1
+	var tick uint = 0
+	var time_at_prev_tick = time.Now()
+	d := Database{pos: Position{x: 1.0, y: 0.0}}
+	d2 := Database{pos: Position{x: 0.0, y: 0.0}}
+	ch := Channel{ep1: Endpoint{ty: 'd', idx: 0}, ep2: Endpoint{ty: 'd', idx: 1}}
+	sim := SimulationState{databases: []Database{d, d2}, channels: []Channel{ch}}
+
+	storeInJs := func(this js.Value, args []js.Value) any {
+		return sim.tojs()
+	}
+	js.Global().Set("callback", js.FuncOf(storeInJs))
+
 	for {
-		ang := float64(i) * math.Pi / 180.0
-		d := Database{pos: Position{x: math.Cos(ang), y: math.Sin(ang)}}
-		d2 := Database{pos: Position{x: 0.0, y: 0.0}}
-		ch := Channel{ep1: Endpoint{ty: 'd', idx: 0}, ep2: Endpoint{ty: 'd', idx: 1}}
-		sim := SimulationState{databases: []Database{d, d2}, channels: []Channel{ch}}
-		storeInJs := func(this js.Value, args []js.Value) any {
-			return sim.tojs()
+		time_to_next_tick_truncated := time_at_prev_tick.Add(TIME_PER_TICK).Sub(time.Now()).Truncate(time.Millisecond)
+		if time_to_next_tick_truncated > time.Microsecond {
+			time.Sleep(time_to_next_tick_truncated)
 		}
-		js.Global().Set("callback", js.FuncOf(storeInJs))
-		JsDo()
-		i++
-		time.Sleep(16 * time.Millisecond)
+
+		time_after_sleep := time.Now()
+		for time_after_sleep.Sub(time_at_prev_tick) > TIME_PER_TICK {
+			tick++
+			update(tick, sim)
+			JsDo()
+			time_at_prev_tick = time_at_prev_tick.Add(TIME_PER_TICK)
+		}
 	}
 }
