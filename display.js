@@ -1,25 +1,28 @@
 import { Subject } from 'rxjs';
 
 const CANVAS = document.getElementById("draw");
-const wr = 2.0;
-const hr = wr * CANVAS.height / CANVAS.width;
+// Using the coordinate system from the golang side:
+// treat the canvas as the space [-max_x, max_x] X [-max_y, max_y].
+const GO_MAX_X = 2.0;
+const GO_MAX_Y = GO_MAX_X * CANVAS.height / CANVAS.width;
 
 function toCanvasCoords(pos) {
-    return { x: (pos.x + wr) * (CANVAS.width / (2.0 * wr)),
-             y: (pos.y + hr) * (CANVAS.height / (2.0 * hr)) };
+    return { x: (pos.x + GO_MAX_X) * (CANVAS.width / (2.0 * GO_MAX_X)),
+             y: (pos.y + GO_MAX_Y) * (CANVAS.height / (2.0 * GO_MAX_Y)) };
 }
 
 function drawDB(db, ctx) {
-    let wr = 2.0;
-    let hr = wr * ctx.canvas.height / ctx.canvas.width;
-    let x = (db.pos.x + wr) * (ctx.canvas.width / (2.0 * wr));
-    let y = (db.pos.y + hr) * (ctx.canvas.height / (2.0 * hr));
+    let x = (db.pos.x + GO_MAX_X) * (ctx.canvas.width / (2.0 * GO_MAX_X));
+    let y = (db.pos.y + GO_MAX_Y) * (ctx.canvas.height / (2.0 * GO_MAX_Y));
 
-    let db_width = wr * 37.5;
-    let db_height = wr * 50;
-    let db_border = wr * 1.5;
-    ctx.fillRect(x, y, db_width, db_height);
-    ctx.clearRect(x + db_border, y + db_border, db_width - 2 * db_border, db_height - 2 * db_border);
+    const DB_WIDTH = GO_MAX_X * 37.5 * 1000.0 / CANVAS.width;
+    const DB_HEIGHT = GO_MAX_X * 50 * 1000.0 / CANVAS.width;
+    const DB_BORDER = GO_MAX_X * 1.5 * 1000.0 / CANVAS.width;
+    ctx.fillRect(x - DB_WIDTH / 2.0, y - DB_HEIGHT / 2.0, DB_WIDTH, DB_HEIGHT);
+    ctx.clearRect(x - DB_WIDTH / 2.0 + DB_BORDER,
+                  y - DB_HEIGHT / 2.0 + DB_BORDER,
+                  DB_WIDTH - 2 * DB_BORDER,
+                  DB_HEIGHT - 2 * DB_BORDER);
 }
 
 function getPosFromEndpoint(sim, ep) {
@@ -36,10 +39,9 @@ function drawChannels(sim, ctx) {
         let ch = sim.channels[i];
         let pos1 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep1));
         let pos2 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep2));
-        
         ctx.moveTo(pos1.x, pos1.y);
         ctx.lineTo(pos2.x, pos2.y);
-        ctx.lineWidth = wr;
+        ctx.lineWidth = 3000.0 / CANVAS.width;
         ctx.stroke();
     }
 }
