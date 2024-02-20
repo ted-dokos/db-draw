@@ -4,7 +4,6 @@
 package main
 
 import (
-	"math"
 	"syscall/js"
 	"time"
 )
@@ -62,15 +61,54 @@ func (e Endpoint) tojs() js.Value {
 	})
 }
 
-type Channel struct {
-	ep1 Endpoint
-	ep2 Endpoint
+type TransactionShape uint
+
+const (
+	square TransactionShape = iota
+	triangle
+	circle
+)
+
+type Transaction struct {
+	progress float64
+	shape    TransactionShape
 }
 
+func maybe_transaction(t *Transaction) js.Value {
+	if t == nil {
+		return js.Null()
+	}
+	return t.tojs()
+}
+func (t Transaction) tojs() js.Value {
+	return js.ValueOf(map[string]interface{}{
+		"progress": js.ValueOf(t.progress),
+		"shape":    js.ValueOf(uint(t.shape)),
+	})
+}
+
+type Channel struct {
+	ep1         Endpoint
+	ep2         Endpoint
+	travel_time float64
+	outgoing    *Transaction
+	incoming    *Transaction
+}
+
+func (c *Channel) send(outgoing bool) {
+	if outgoing {
+		c.outgoing = &Transaction{progress: 0.0, shape: circle}
+	} else {
+		c.incoming = &Transaction{progress: 0.0, shape: square}
+	}
+}
 func (c Channel) tojs() js.Value {
 	return js.ValueOf(map[string]interface{}{
-		"ep1": c.ep1.tojs(),
-		"ep2": c.ep2.tojs(),
+		"ep1":         c.ep1.tojs(),
+		"ep2":         c.ep2.tojs(),
+		"travel_time": js.ValueOf(c.travel_time),
+		"outgoing":    maybe_transaction(c.outgoing),
+		"incoming":    maybe_transaction(c.incoming),
 	})
 }
 
@@ -101,8 +139,26 @@ func (s SimulationState) tojs() js.Value {
 }
 
 func update(tick uint, s SimulationState) {
-	ang := float64(tick) * math.Pi / 180.0
-	s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
+	// ang := float64(tick) * math.Pi / 180.0
+	// s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
+	if tick == 200 {
+		s.channels[0].send(true)
+	}
+	for i := 0; i < len(s.channels); i++ {
+		ch := &s.channels[i]
+		if ch.outgoing != nil {
+			ch.outgoing.progress += TIME_PER_TICK.Seconds() / ch.travel_time
+			if ch.outgoing.progress >= 1.0 {
+				ch.outgoing = nil
+			}
+		}
+		if ch.incoming != nil {
+			ch.incoming.progress += TIME_PER_TICK.Seconds() / ch.travel_time
+			if ch.incoming.progress >= 1.0 {
+				ch.incoming = nil
+			}
+		}
+	}
 }
 
 const TICKS_PER_SECOND = 100.0
@@ -112,9 +168,11 @@ func main() {
 	var tick uint = 0
 	var time_at_prev_tick = time.Now()
 	d := Database{pos: Position{x: 1.0, y: 0.0}}
-	d2 := Database{pos: Position{x: 0.0, y: 0.0}}
-	ch := Channel{ep1: Endpoint{ty: 'd', idx: 0}, ep2: Endpoint{ty: 'd', idx: 1}}
-	sim := SimulationState{databases: []Database{d, d2}, channels: []Channel{ch}}
+	//d2 := Database{pos: Position{x: 0.0, y: 0.0}}
+	client := Client{pos: Position{x: -0.5, y: 0.0}}
+	//ch := Channel{ep1: Endpoint{ty: 'd', idx: 0}, ep2: Endpoint{ty: 'd', idx: 1}}
+	ch2 := Channel{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 3.0}
+	sim := SimulationState{databases: []Database{d /*, d2*/}, channels: []Channel{ /*ch,*/ ch2}, clients: []Client{client}}
 
 	storeInJs := func(this js.Value, args []js.Value) any {
 		return sim.tojs()
