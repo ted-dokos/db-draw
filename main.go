@@ -69,9 +69,18 @@ const (
 	circle
 )
 
+type TransactionStyle uint
+
+const (
+	solid TransactionStyle = iota
+	stripe
+	stipple
+)
+
 type Transaction struct {
 	progress float64
 	shape    TransactionShape
+	style    TransactionStyle
 }
 
 func maybe_transaction(t *Transaction) js.Value {
@@ -84,6 +93,7 @@ func (t Transaction) tojs() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"progress": js.ValueOf(t.progress),
 		"shape":    js.ValueOf(uint(t.shape)),
+		"style":    js.ValueOf(uint(t.style)),
 	})
 }
 
@@ -95,11 +105,12 @@ type Channel struct {
 	incoming    *Transaction
 }
 
-func (c *Channel) send(outgoing bool) {
+func (c *Channel) send(outgoing bool, shape TransactionShape, style TransactionStyle) {
+	t := Transaction{progress: 0.0, shape: shape, style: style}
 	if outgoing {
-		c.outgoing = &Transaction{progress: 0.0, shape: circle}
+		c.outgoing = &t
 	} else {
-		c.incoming = &Transaction{progress: 0.0, shape: square}
+		c.incoming = &t
 	}
 }
 func (c Channel) tojs() js.Value {
@@ -142,7 +153,13 @@ func update(tick uint, s SimulationState) {
 	// ang := float64(tick) * math.Pi / 180.0
 	// s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
 	if tick == 200 {
-		s.channels[0].send(true)
+		s.channels[0].send(true, triangle, stripe)
+	}
+	if tick == 600 {
+		s.channels[0].send(true, triangle, solid)
+	}
+	if tick == 1000 {
+		s.channels[0].send(true, circle, solid)
 	}
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]

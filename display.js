@@ -1,5 +1,6 @@
 import { Subject } from 'rxjs';
 import * as vector from './vector.js';
+import { createSolid, createStripes } from './patterns.js';
 
 const CANVAS = document.getElementById("draw");
 // Using the coordinate system from the golang side:
@@ -10,10 +11,23 @@ const GO_MAX_Y = GO_MAX_X * CANVAS.height / CANVAS.width;
 const CLIENT_RADIUS = 25 * 1000.0 / CANVAS.width;
 const CLIENT_BORDER = 3.0 * 1000.0 / CANVAS.width;
 
+const SOLID = createSolid(CANVAS.getContext("2d"));
+const STRIPES = createStripes(CANVAS.getContext("2d"));
+
 function toCanvasCoords(pos) {
     return new vector.Vector(
         (pos.x + GO_MAX_X) * (CANVAS.width / (2.0 * GO_MAX_X)),
         (pos.y + GO_MAX_Y) * (CANVAS.height / (2.0 * GO_MAX_Y)));
+}
+
+function unitTriangle() {
+    let tri = new Path2D();
+    tri.moveTo(0.0, 1.0);
+    let x = 2 / Math.sqrt(3.0);
+    tri.lineTo(x, -1.0);
+    tri.lineTo(-x, -1.0);
+    tri.lineTo(0.0, 1.0);
+    return tri;
 }
 
 function drawDB(db, ctx) {
@@ -44,16 +58,34 @@ function getPosFromEndpoint(sim, ep) {
     }
 }
 
+function getTransactionStyle(transaction) {
+    if (transaction.style === 0) { // solid
+        return SOLID;
+    } else if (transaction.style === 1) { // stripes
+        return STRIPES;
+    }
+    return undefined;
+}
+
 function drawChannelTransaction(transaction, ctx, pos) {
+    ctx.save();
+    let pattern = getTransactionStyle(transaction);
     if (transaction.shape === 0) { // square
         ctx.fillRect(pos.x - 12, pos.y - 12, 24, 24);
     } else if (transaction.shape === 1) { // triangle
-        ctx.beginPath();
+        let tri = unitTriangle();
+        let transform = {a: -12.0, d: -12.0, e: pos.x, f: pos.y};
+        let inv_transform = {a: 1.0/transform.a, d: 1.0/transform.d};
+        ctx.setTransform(transform);
+        pattern.setTransform(inv_transform);
+        ctx.fillStyle = pattern;
+        ctx.fill(tri);
     } else if (transaction.shape === 2) { // circle
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, 12, 0, 2*Math.PI);
         ctx.fill();
     }
+    ctx.restore();
 }
 
 function drawChannels(sim, ctx) {
