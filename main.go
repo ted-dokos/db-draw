@@ -73,8 +73,8 @@ type TransactionStyle uint
 
 const (
 	solid TransactionStyle = iota
-	stripe
-	stipple
+	hstripe
+	vstripe
 )
 
 type Transaction struct {
@@ -153,13 +153,13 @@ func update(tick uint, s SimulationState) {
 	// ang := float64(tick) * math.Pi / 180.0
 	// s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
 	if tick == 200 {
-		s.channels[0].send(true, triangle, stripe)
+		s.channels[0].send(true, triangle, hstripe)
 	}
 	if tick == 600 {
-		s.channels[0].send(true, triangle, solid)
+		s.channels[0].send(true, square, solid)
 	}
 	if tick == 1000 {
-		s.channels[0].send(true, circle, solid)
+		s.channels[0].send(true, circle, vstripe)
 	}
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]

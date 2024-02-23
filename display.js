@@ -1,18 +1,21 @@
 import { Subject } from 'rxjs';
 import * as vector from './vector.js';
-import { createSolid, createStripes } from './patterns.js';
+import { createSolid, createHorizStripes, createVertStripes } from './patterns.js';
+import { unitCircle, unitSquare, unitTriangle } from './shapes.js';
 
 const CANVAS = document.getElementById("draw");
 // Using the coordinate system from the golang side:
 // treat the canvas as the space [-max_x, max_x] X [-max_y, max_y].
+const REFERENCE_WIDTH = 1024.0;
 const GO_MAX_X = 2.0;
 const GO_MAX_Y = GO_MAX_X * CANVAS.height / CANVAS.width;
 
-const CLIENT_RADIUS = 25 * 1000.0 / CANVAS.width;
-const CLIENT_BORDER = 3.0 * 1000.0 / CANVAS.width;
+const CLIENT_RADIUS = 25 * CANVAS.width / REFERENCE_WIDTH;
+const CLIENT_BORDER = 3.0 * CANVAS.width / REFERENCE_WIDTH;
 
 const SOLID = createSolid(CANVAS.getContext("2d"));
-const STRIPES = createStripes(CANVAS.getContext("2d"));
+const HORIZ_STRIPES = createHorizStripes(CANVAS.getContext("2d"));
+const VERT_STRIPES = createVertStripes(CANVAS.getContext("2d"));
 
 function toCanvasCoords(pos) {
     return new vector.Vector(
@@ -20,20 +23,10 @@ function toCanvasCoords(pos) {
         (pos.y + GO_MAX_Y) * (CANVAS.height / (2.0 * GO_MAX_Y)));
 }
 
-function unitTriangle() {
-    let tri = new Path2D();
-    tri.moveTo(0.0, 1.0);
-    let x = 2 / Math.sqrt(3.0);
-    tri.lineTo(x, -1.0);
-    tri.lineTo(-x, -1.0);
-    tri.lineTo(0.0, 1.0);
-    return tri;
-}
-
 function drawDB(db, ctx) {
-    const DB_WIDTH = GO_MAX_X * 37.5 * 1000.0 / CANVAS.width;
-    const DB_HEIGHT = GO_MAX_X * 50 * 1000.0 / CANVAS.width;
-    const DB_BORDER = GO_MAX_X * 1.5 * 1000.0 / CANVAS.width;
+    const DB_WIDTH = GO_MAX_X * 37.5 * CANVAS.width / REFERENCE_WIDTH;
+    const DB_HEIGHT = GO_MAX_X * 50 * CANVAS.width / REFERENCE_WIDTH;
+    const DB_BORDER = GO_MAX_X * 1.5 * CANVAS.width / REFERENCE_WIDTH;
     let db_pos = toCanvasCoords(db.pos);
     ctx.fillRect(db_pos.x - DB_WIDTH / 2.0, db_pos.y - DB_HEIGHT / 2.0, DB_WIDTH, DB_HEIGHT);
     ctx.clearRect(db_pos.x - DB_WIDTH / 2.0 + DB_BORDER,
@@ -59,32 +52,36 @@ function getPosFromEndpoint(sim, ep) {
 }
 
 function getTransactionStyle(transaction) {
-    if (transaction.style === 0) { // solid
-        return SOLID;
-    } else if (transaction.style === 1) { // stripes
-        return STRIPES;
+    switch (transaction.style) {
+        case 0: // solid
+            return SOLID;
+        case 1: // horiz stripes
+            return HORIZ_STRIPES;
+        default: // vert stripes
+            return VERT_STRIPES;
     }
-    return undefined;
 }
 
 function drawChannelTransaction(transaction, ctx, pos) {
     ctx.save();
     let pattern = getTransactionStyle(transaction);
+    const TRANSFORM_SCALE = 12.0 * CANVAS.width / REFERENCE_WIDTH;
+    let transform = {a: -TRANSFORM_SCALE, d: -TRANSFORM_SCALE, e: pos.x, f: pos.y};
+    let inv_transform = {a: 1.0/TRANSFORM_SCALE, d: 1.0/TRANSFORM_SCALE};
+    let shape = null;
     if (transaction.shape === 0) { // square
-        ctx.fillRect(pos.x - 12, pos.y - 12, 24, 24);
+        shape = unitSquare();
     } else if (transaction.shape === 1) { // triangle
-        let tri = unitTriangle();
-        let transform = {a: -12.0, d: -12.0, e: pos.x, f: pos.y};
-        let inv_transform = {a: 1.0/transform.a, d: 1.0/transform.d};
-        ctx.setTransform(transform);
-        pattern.setTransform(inv_transform);
-        ctx.fillStyle = pattern;
-        ctx.fill(tri);
+        shape = unitTriangle();
     } else if (transaction.shape === 2) { // circle
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 12, 0, 2*Math.PI);
-        ctx.fill();
+        shape = unitCircle();
     }
+    ctx.setTransform(transform);
+    pattern.setTransform(inv_transform);
+    ctx.fillStyle = pattern;
+    ctx.fill(shape);
+    ctx.lineWidth = 2.0 / TRANSFORM_SCALE;
+    ctx.stroke(shape);
     ctx.restore();
 }
 
@@ -100,12 +97,13 @@ function drawChannels(sim, ctx) {
         let pos4 = vector.add(pos2, vector.smult(-buffer, vec));
         ctx.moveTo(pos3.x, pos3.y);
         ctx.lineTo(pos4.x, pos4.y);
-        ctx.lineWidth = 3000.0 / CANVAS.width;
+        ctx.lineWidth = 3.0 * CANVAS.width / REFERENCE_WIDTH;
         ctx.stroke();
         if (ch.outgoing !== null) {
             let dist = vector.distance(pos3, pos4);
             let linepos = vector.add(pos3, vector.smult(dist * ch.outgoing.progress, vec));
-            let trpos = vector.add(linepos, vector.smult(-20.0, vector.get_perp(vec)));
+            const PERP_DIST = -20.0 * CANVAS.width / REFERENCE_WIDTH;
+            let trpos = vector.add(linepos, vector.smult(PERP_DIST, vector.get_perp(vec)));
             drawChannelTransaction(ch.outgoing, ctx, trpos);
         }
     }
