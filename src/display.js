@@ -13,7 +13,8 @@ const GO_MAX_Y = GO_MAX_X * CANVAS.height / CANVAS.width;
 const CLIENT_RADIUS = 25 * CANVAS.width / REFERENCE_WIDTH;
 const CLIENT_BORDER = 3.0 * CANVAS.width / REFERENCE_WIDTH;
 
-const SOLID = createSolid(CANVAS.getContext("2d"));
+const SOLID = createSolid(CANVAS.getContext("2d"), "#FFC107");
+const BLANK = createSolid(CANVAS.getContext("2d"), "#FFFFFF");
 const HORIZ_STRIPES = createHorizStripes(CANVAS.getContext("2d"));
 const VERT_STRIPES = createVertStripes(CANVAS.getContext("2d"));
 
@@ -21,6 +22,54 @@ function toCanvasCoords(pos) {
     return new vector.Vector(
         (pos.x + GO_MAX_X) * (CANVAS.width / (2.0 * GO_MAX_X)),
         (pos.y + GO_MAX_Y) * (CANVAS.height / (2.0 * GO_MAX_Y)));
+}
+
+const ShapeMap = {
+    'circle': 0,
+    'square': 1,
+    'triangle': 2,
+};
+
+const ShapeState = {
+    'solid': 0,
+    'hstripe': 1,
+    'vstripe': 2,
+    'absent': 3,
+};
+
+function getShapePath(shape) {
+    switch (shape) {
+        case 0: // circle
+            return unitCircle();
+        case 1: // square
+            return unitSquare();
+        default: // triangle
+            return unitTriangle();
+    }
+}
+
+function getStylePattern(style) {
+    switch (style) {
+        case 0: // solid
+            return SOLID;
+        case 1: // horiz stripes
+            return HORIZ_STRIPES;
+        case 2: // vert stripes
+            return VERT_STRIPES;
+        default: // absent
+            return BLANK;
+    }
+}
+
+function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
+    let transform = { a: scale, d: scale, e: pos.x, f: pos.y };
+    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: 1};
+    context.setTransform(transform);
+    style_pattern.setTransform(pattern_transform);
+    context.fillStyle = style_pattern;
+    context.fill(shape_path);
+    context.lineWidth = 2.0 / scale;
+    context.stroke(shape_path);
 }
 
 function drawDB(db, ctx) {
@@ -33,6 +82,16 @@ function drawDB(db, ctx) {
         db_pos.y - DB_HEIGHT / 2.0 + DB_BORDER,
         DB_WIDTH - 2 * DB_BORDER,
         DB_HEIGHT - 2 * DB_BORDER);
+
+    ctx.save();
+    for (const shape in db.data) {
+        if (db.data[shape] !== ShapeState.absent) {
+            let pos = vector.add(db_pos, vector.smult(DB_HEIGHT / 3 * (ShapeMap[shape] - 1), new vector.Vector(0, 1)));
+            const TRANSFORM_SCALE = 12.0 * CANVAS.width / REFERENCE_WIDTH;
+            drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(ShapeMap[shape]), getStylePattern(db.data[shape]));
+        }
+    }
+    ctx.restore();
 }
 
 function drawClient(client, ctx) {
@@ -51,37 +110,10 @@ function getPosFromEndpoint(sim, ep) {
     }
 }
 
-function getTransactionStyle(transaction) {
-    switch (transaction.style) {
-        case 0: // solid
-            return SOLID;
-        case 1: // horiz stripes
-            return HORIZ_STRIPES;
-        default: // vert stripes
-            return VERT_STRIPES;
-    }
-}
-
 function drawChannelTransaction(transaction, ctx, pos) {
     ctx.save();
-    let pattern = getTransactionStyle(transaction);
     const TRANSFORM_SCALE = 12.0 * CANVAS.width / REFERENCE_WIDTH;
-    let transform = {a: -TRANSFORM_SCALE, d: -TRANSFORM_SCALE, e: pos.x, f: pos.y};
-    let inv_transform = {a: 1.0/TRANSFORM_SCALE, d: 1.0/TRANSFORM_SCALE};
-    let shape = null;
-    if (transaction.shape === 0) { // square
-        shape = unitSquare();
-    } else if (transaction.shape === 1) { // triangle
-        shape = unitTriangle();
-    } else if (transaction.shape === 2) { // circle
-        shape = unitCircle();
-    }
-    ctx.setTransform(transform);
-    pattern.setTransform(inv_transform);
-    ctx.fillStyle = pattern;
-    ctx.fill(shape);
-    ctx.lineWidth = 2.0 / TRANSFORM_SCALE;
-    ctx.stroke(shape);
+    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(transaction.shape), getStylePattern(transaction.style));
     ctx.restore();
 }
 

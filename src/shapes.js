@@ -1,10 +1,10 @@
 export function unitTriangle() {
     let tri = new Path2D();
-    tri.moveTo(0.0, 1.0);
+    tri.moveTo(0.0, -1.0);
     let x = 2 / Math.sqrt(3.0);
-    tri.lineTo(x, -1.0);
-    tri.lineTo(-x, -1.0);
-    tri.lineTo(0.0, 1.0);
+    tri.lineTo(x, 1.0);
+    tri.lineTo(-x, 1.0);
+    tri.lineTo(0.0, -1.0);
     return tri;
 }
 

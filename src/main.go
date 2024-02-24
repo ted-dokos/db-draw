@@ -29,13 +29,43 @@ func (p Position) tojs() js.Value {
 	})
 }
 
+type Shape uint
+
+const (
+	circle Shape = iota
+	square
+	triangle
+)
+
+type ShapeState uint
+
+const (
+	solid ShapeState = iota
+	hstripe
+	vstripe
+	absent
+)
+
 type Database struct {
-	pos Position
+	pos  Position
+	data map[Shape]ShapeState
 }
 
 func (d Database) tojs() js.Value {
+	getState := func(key Shape, mp map[Shape]ShapeState) ShapeState {
+		v, present := mp[key]
+		if !present {
+			return absent
+		}
+		return v
+	}
 	return js.ValueOf(map[string]interface{}{
 		"pos": d.pos.tojs(),
+		"data": js.ValueOf(map[string]interface{}{
+			"circle":   js.ValueOf(uint(getState(circle, d.data))),
+			"square":   js.ValueOf(uint(getState(square, d.data))),
+			"triangle": js.ValueOf(uint(getState(triangle, d.data))),
+		}),
 	})
 }
 
@@ -61,26 +91,10 @@ func (e Endpoint) tojs() js.Value {
 	})
 }
 
-type TransactionShape uint
-
-const (
-	square TransactionShape = iota
-	triangle
-	circle
-)
-
-type TransactionStyle uint
-
-const (
-	solid TransactionStyle = iota
-	hstripe
-	vstripe
-)
-
 type Transaction struct {
 	progress float64
-	shape    TransactionShape
-	style    TransactionStyle
+	shape    Shape
+	style    ShapeState
 }
 
 func maybe_transaction(t *Transaction) js.Value {
@@ -105,7 +119,7 @@ type Channel struct {
 	incoming    *Transaction
 }
 
-func (c *Channel) send(outgoing bool, shape TransactionShape, style TransactionStyle) {
+func (c *Channel) send(outgoing bool, shape Shape, style ShapeState) {
 	t := Transaction{progress: 0.0, shape: shape, style: style}
 	if outgoing {
 		c.outgoing = &t
@@ -149,7 +163,13 @@ func (s SimulationState) tojs() js.Value {
 	})
 }
 
-func update(tick uint, s SimulationState) {
+func receive(s *SimulationState, t *Transaction, e *Endpoint) {
+	if e.ty == 'd' {
+		s.databases[e.idx].data[t.shape] = t.style
+	}
+}
+
+func update(tick uint, s *SimulationState) {
 	// ang := float64(tick) * math.Pi / 180.0
 	// s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
 	if tick == 200 {
@@ -161,17 +181,22 @@ func update(tick uint, s SimulationState) {
 	if tick == 1000 {
 		s.channels[0].send(true, circle, vstripe)
 	}
+	if tick == 1400 {
+		s.channels[0].send(true, square, vstripe)
+	}
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]
 		if ch.outgoing != nil {
 			ch.outgoing.progress += TIME_PER_TICK.Seconds() / ch.travel_time
 			if ch.outgoing.progress >= 1.0 {
+				receive(s, ch.outgoing, &ch.ep2)
 				ch.outgoing = nil
 			}
 		}
 		if ch.incoming != nil {
 			ch.incoming.progress += TIME_PER_TICK.Seconds() / ch.travel_time
 			if ch.incoming.progress >= 1.0 {
+				receive(s, ch.incoming, &ch.ep1)
 				ch.incoming = nil
 			}
 		}
@@ -184,12 +209,10 @@ const TIME_PER_TICK = time.Second / TICKS_PER_SECOND
 func main() {
 	var tick uint = 0
 	var time_at_prev_tick = time.Now()
-	d := Database{pos: Position{x: 1.0, y: 0.0}}
-	//d2 := Database{pos: Position{x: 0.0, y: 0.0}}
+	d := Database{pos: Position{x: 1.0, y: 0.0}, data: make(map[Shape]ShapeState)}
 	client := Client{pos: Position{x: -0.5, y: 0.0}}
-	//ch := Channel{ep1: Endpoint{ty: 'd', idx: 0}, ep2: Endpoint{ty: 'd', idx: 1}}
-	ch2 := Channel{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 3.0}
-	sim := SimulationState{databases: []Database{d /*, d2*/}, channels: []Channel{ /*ch,*/ ch2}, clients: []Client{client}}
+	ch := Channel{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 3.0}
+	sim := SimulationState{databases: []Database{d}, channels: []Channel{ch}, clients: []Client{client}}
 
 	storeInJs := func(this js.Value, args []js.Value) any {
 		return sim.tojs()
@@ -205,7 +228,7 @@ func main() {
 		time_after_sleep := time.Now()
 		for time_after_sleep.Sub(time_at_prev_tick) > TIME_PER_TICK {
 			tick++
-			update(tick, sim)
+			update(tick, &sim)
 			JsDo()
 			time_at_prev_tick = time_at_prev_tick.Add(TIME_PER_TICK)
 		}
