@@ -170,8 +170,6 @@ func receive(s *SimulationState, t *Transaction, e *Endpoint) {
 }
 
 func update(tick uint, s *SimulationState) {
-	// ang := float64(tick) * math.Pi / 180.0
-	// s.databases[0].pos = Position{x: math.Cos(ang), y: math.Sin(ang)}
 	if tick == 200 {
 		s.channels[0].send(true, triangle, hstripe)
 	}
