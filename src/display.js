@@ -133,7 +133,7 @@ go.importObject.howdy = {
         obs.next(sim);
     }
 };
-WebAssembly.instantiateStreaming(fetch("main.wasm"),
+WebAssembly.instantiateStreaming(fetch("bin/main.wasm"),
     go.importObject).then((result) => {
         go.run(result.instance);
     });
