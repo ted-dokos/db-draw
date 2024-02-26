@@ -4,6 +4,7 @@
 package main
 
 import (
+	"math/rand"
 	"syscall/js"
 	"time"
 )
@@ -91,10 +92,18 @@ func (e Endpoint) tojs() js.Value {
 	})
 }
 
+type Op uint
+
+const (
+	read Op = iota
+	write
+)
+
 type Transaction struct {
 	progress float64
 	shape    Shape
 	style    ShapeState
+	ty       Op
 }
 
 func maybe_transaction(t *Transaction) js.Value {
@@ -108,6 +117,7 @@ func (t Transaction) tojs() js.Value {
 		"progress": js.ValueOf(t.progress),
 		"shape":    js.ValueOf(uint(t.shape)),
 		"style":    js.ValueOf(uint(t.style)),
+		"type":     js.ValueOf(uint(t.ty)),
 	})
 }
 
@@ -119,8 +129,8 @@ type Channel struct {
 	incoming    *Transaction
 }
 
-func (c *Channel) send(outgoing bool, shape Shape, style ShapeState) {
-	t := Transaction{progress: 0.0, shape: shape, style: style}
+func (c *Channel) sendWrite(outgoing bool, shape Shape, style ShapeState) {
+	t := Transaction{progress: 0.0, shape: shape, style: style, ty: write}
 	if outgoing {
 		c.outgoing = &t
 	} else {
@@ -169,36 +179,63 @@ func receive(s *SimulationState, t *Transaction, e *Endpoint) {
 	}
 }
 
+// func updateChannelDirection(s *SimulationState, t *Transaction, e *Endpoint, travel_time float64) {
+// 	if t == nil {
+// 		return
+// 	}
+// 	t.progress += TIME_PER_TICK.Seconds() / travel_time
+// 	if t.progress < 1.0 {
+// 		return
+// 	}
+// 	if t.ty == write {
+// 		receive(s, t, e)
+// 	}
+// }
+
 func update(tick uint, s *SimulationState) {
+	style := rand.Int() % 3
 	if tick == 200 {
-		s.channels[0].send(true, triangle, hstripe)
+
+		s.channels[0].sendWrite(true, triangle, ShapeState(style))
 	}
 	if tick == 600 {
-		s.channels[0].send(true, square, solid)
+		s.channels[0].sendWrite(true, square, ShapeState(style))
 	}
 	if tick == 1000 {
-		s.channels[0].send(true, circle, vstripe)
+		s.channels[0].sendWrite(true, circle, ShapeState(style))
 	}
 	if tick == 1400 {
-		s.channels[0].send(true, square, vstripe)
+		s.channels[0].sendWrite(true, square, ShapeState(style))
+	}
+	if tick > 1400 && (tick-200)%400 == 0 {
+		shape := rand.Int() % 3
+		s.channels[0].sendWrite(true, Shape(shape), ShapeState(style))
 	}
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]
-		if ch.outgoing != nil {
-			ch.outgoing.progress += TIME_PER_TICK.Seconds() / ch.travel_time
-			if ch.outgoing.progress >= 1.0 {
-				receive(s, ch.outgoing, &ch.ep2)
-				ch.outgoing = nil
+		updateDir := func(dir *Transaction, ep *Endpoint) *Transaction {
+			if dir == nil {
+				return nil
 			}
-		}
-		if ch.incoming != nil {
-			ch.incoming.progress += TIME_PER_TICK.Seconds() / ch.travel_time
-			if ch.incoming.progress >= 1.0 {
-				receive(s, ch.incoming, &ch.ep1)
-				ch.incoming = nil
+			dir.progress += TIME_PER_TICK.Seconds() / ch.travel_time
+			if dir.progress < 1.0 {
+				return dir
 			}
+			if dir.ty == write {
+				receive(s, dir, ep)
+			}
+			return nil
 		}
+		ch.outgoing = updateDir(ch.outgoing, &ch.ep2)
+		ch.incoming = updateDir(ch.incoming, &ch.ep1)
 	}
+}
+
+func make_intro_sim() SimulationState {
+	d := Database{pos: Position{x: 0.5, y: 0.0}, data: make(map[Shape]ShapeState)}
+	client := Client{pos: Position{x: -0.5, y: 0.0}}
+	ch := Channel{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 2.0}
+	return SimulationState{databases: []Database{d}, channels: []Channel{ch}, clients: []Client{client}}
 }
 
 const TICKS_PER_SECOND = 100.0
@@ -207,13 +244,11 @@ const TIME_PER_TICK = time.Second / TICKS_PER_SECOND
 func main() {
 	var tick uint = 0
 	var time_at_prev_tick = time.Now()
-	d := Database{pos: Position{x: 1.0, y: 0.0}, data: make(map[Shape]ShapeState)}
-	client := Client{pos: Position{x: -0.5, y: 0.0}}
-	ch := Channel{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 3.0}
-	sim := SimulationState{databases: []Database{d}, channels: []Channel{ch}, clients: []Client{client}}
+	sims := []SimulationState{make_intro_sim(), make_intro_sim()}
+	current_sim_idx := 0
 
 	storeInJs := func(this js.Value, args []js.Value) any {
-		return sim.tojs()
+		return sims[current_sim_idx].tojs()
 	}
 	js.Global().Set("callback", js.FuncOf(storeInJs))
 
@@ -226,7 +261,7 @@ func main() {
 		time_after_sleep := time.Now()
 		for time_after_sleep.Sub(time_at_prev_tick) > TIME_PER_TICK {
 			tick++
-			update(tick, &sim)
+			update(tick, &sims[current_sim_idx])
 			JsDo()
 			time_at_prev_tick = time_at_prev_tick.Add(TIME_PER_TICK)
 		}

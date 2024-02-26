@@ -9,9 +9,30 @@
 		<script type="module" src="src/patterns.js"></script>
 		<script type="module" src="src/vector.js"></script>
 		<script type="module" src="src/display.js"></script>
-
+		<style>
+			canvas {
+				margin-right: auto;
+				margin-left: auto;
+				display: block;
+			}
+			div.text {
+				margin-right: 30%;
+				margin-left: 30%;
+				display: block;
+			}
+		</style>
 	</head>
 	<body>
+		<div class="text">
+			I'll start with a simple model for a database: it's a server that accepts interactions from clients.
+			<br>
+		</div>
+		<canvas id="draw" width="1920" height="1080"></canvas>
+		<div class="text">
+			<br>
+			This is some follow-up text.
+			<br>
+		</div>
 		<canvas id="draw" width="1920" height="1080"></canvas>
 	</body>
 </html>

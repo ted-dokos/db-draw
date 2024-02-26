@@ -2,7 +2,7 @@ export function createHorizStripes(context) {
     let stripes = new OffscreenCanvas(6, 6);
     let ctx = stripes.getContext("2d");
     ctx.fillStyle = "#D81B60";
-    ctx.fillRect(0, 0, 6, 3);
+    ctx.fillRect(0, 1, 6, 4);
     return context.createPattern(stripes, "repeat");
 }
 
