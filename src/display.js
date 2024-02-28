@@ -3,25 +3,51 @@ import * as vector from './vector.js';
 import { createSolid, createHorizStripes, createVertStripes } from './patterns.js';
 import { unitCircle, unitSquare, unitTriangle } from './shapes.js';
 
-const CANVAS = document.getElementById("draw");
+const CANVAS_WIDTH = 1920 - 160;
+const CANVAS_HEIGHT = 1080 - 90;
+
+let canvases = document.getElementsByTagName("canvas");
+let current_sim_running = 0;
+for (let i = 0; i < canvases.length; i++) {
+    let canvas = canvases[i];
+    canvas.setAttribute('width', CANVAS_WIDTH.toString());
+    canvas.setAttribute('height', CANVAS_HEIGHT.toString());
+    let intersection_observer = new IntersectionObserver(
+        (entries) => {
+            let entry = entries[0];
+            if (!window.setSimIndex) {
+                return;
+            }
+            console.log(i);
+            if (entry.intersectionRatio === 1.0) {
+                window.setSimIndex(i);
+                current_sim_running = i;
+            } else if (current_sim_running !== -1) {
+                window.setSimIndex(-1);
+                current_sim_running = -1;
+            }
+        },
+        /*options=*/ {
+            root: document.querySelector("#scrollArea"),
+            rootMargin: "0px",
+            threshold: [1.0, 0.95],
+        });
+    intersection_observer.observe(canvas);
+}
+
 // Using the coordinate system from the golang side:
 // treat the canvas as the space [-max_x, max_x] X [-max_y, max_y].
 const REFERENCE_WIDTH = 1024.0;
 const GO_MAX_X = 2.0;
-const GO_MAX_Y = GO_MAX_X * CANVAS.height / CANVAS.width;
+const GO_MAX_Y = GO_MAX_X * CANVAS_HEIGHT / CANVAS_WIDTH;
 
-const CLIENT_RADIUS = 25 * CANVAS.width / REFERENCE_WIDTH;
-const CLIENT_BORDER = 3.0 * CANVAS.width / REFERENCE_WIDTH;
-
-const SOLID = createSolid(CANVAS.getContext("2d"), "#FFC107");
-const BLANK = createSolid(CANVAS.getContext("2d"), "#FFFFFF");
-const HORIZ_STRIPES = createHorizStripes(CANVAS.getContext("2d"));
-const VERT_STRIPES = createVertStripes(CANVAS.getContext("2d"));
+const CLIENT_RADIUS = 25 * CANVAS_WIDTH / REFERENCE_WIDTH;
+const CLIENT_BORDER = 3.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
 
 function toCanvasCoords(pos) {
     return new vector.Vector(
-        (pos.x + GO_MAX_X) * (CANVAS.width / (2.0 * GO_MAX_X)),
-        (pos.y + GO_MAX_Y) * (CANVAS.height / (2.0 * GO_MAX_Y)));
+        (pos.x + GO_MAX_X) * (CANVAS_WIDTH / (2.0 * GO_MAX_X)),
+        (pos.y + GO_MAX_Y) * (CANVAS_HEIGHT / (2.0 * GO_MAX_Y)));
 }
 
 const ShapeMap = {
@@ -48,22 +74,22 @@ function getShapePath(shape) {
     }
 }
 
-function getStylePattern(style) {
+function getStylePattern(context, style) {
     switch (style) {
         case 0: // solid
-            return SOLID;
+            return createSolid(context, "#FFC107");;
         case 1: // horiz stripes
-            return HORIZ_STRIPES;
+            return createHorizStripes(context);;
         case 2: // vert stripes
-            return VERT_STRIPES;
+            return createVertStripes(context);;
         default: // absent
-            return BLANK;
+            return null;
     }
 }
 
 function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
     let transform = { a: scale, d: scale, e: pos.x, f: pos.y };
-    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: 1};
+    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: 1 };
     context.setTransform(transform);
     style_pattern.setTransform(pattern_transform);
     context.fillStyle = style_pattern;
@@ -73,9 +99,9 @@ function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
 }
 
 function drawDB(db, ctx) {
-    const DB_WIDTH = GO_MAX_X * 37.5 * CANVAS.width / REFERENCE_WIDTH;
-    const DB_HEIGHT = GO_MAX_X * 50 * CANVAS.width / REFERENCE_WIDTH;
-    const DB_BORDER = GO_MAX_X * 1.5 * CANVAS.width / REFERENCE_WIDTH;
+    const DB_WIDTH = GO_MAX_X * 37.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
+    const DB_HEIGHT = GO_MAX_X * 50 * CANVAS_WIDTH / REFERENCE_WIDTH;
+    const DB_BORDER = GO_MAX_X * 1.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
     let db_pos = toCanvasCoords(db.pos);
     ctx.fillRect(db_pos.x - DB_WIDTH / 2.0, db_pos.y - DB_HEIGHT / 2.0, DB_WIDTH, DB_HEIGHT);
     ctx.clearRect(db_pos.x - DB_WIDTH / 2.0 + DB_BORDER,
@@ -87,8 +113,8 @@ function drawDB(db, ctx) {
     for (const shape in db.data) {
         if (db.data[shape] !== ShapeState.absent) {
             let pos = vector.add(db_pos, vector.smult(DB_HEIGHT / 3 * (ShapeMap[shape] - 1), new vector.Vector(0, 1)));
-            const TRANSFORM_SCALE = 12.0 * CANVAS.width / REFERENCE_WIDTH;
-            drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(ShapeMap[shape]), getStylePattern(db.data[shape]));
+            const TRANSFORM_SCALE = 12.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
+            drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(ShapeMap[shape]), getStylePattern(ctx, db.data[shape]));
         }
     }
     ctx.restore();
@@ -112,8 +138,8 @@ function getPosFromEndpoint(sim, ep) {
 
 function drawChannelTransaction(transaction, ctx, pos) {
     ctx.save();
-    const TRANSFORM_SCALE = 12.0 * CANVAS.width / REFERENCE_WIDTH;
-    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(transaction.shape), getStylePattern(transaction.style));
+    const TRANSFORM_SCALE = 12.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
+    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(transaction.shape), getStylePattern(ctx, transaction.style));
     ctx.restore();
 }
 
@@ -129,12 +155,12 @@ function drawChannels(sim, ctx) {
         let pos4 = vector.add(pos2, vector.smult(-buffer, vec));
         ctx.moveTo(pos3.x, pos3.y);
         ctx.lineTo(pos4.x, pos4.y);
-        ctx.lineWidth = 3.0 * CANVAS.width / REFERENCE_WIDTH;
+        ctx.lineWidth = 3.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
         ctx.stroke();
         if (ch.outgoing !== null) {
             let dist = vector.distance(pos3, pos4);
             let linepos = vector.add(pos3, vector.smult(dist * ch.outgoing.progress, vec));
-            const PERP_DIST = -20.0 * CANVAS.width / REFERENCE_WIDTH;
+            const PERP_DIST = -20.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
             let trpos = vector.add(linepos, vector.smult(PERP_DIST, vector.get_perp(vec)));
             drawChannelTransaction(ch.outgoing, ctx, trpos);
         }
@@ -144,7 +170,8 @@ function drawChannels(sim, ctx) {
 const go = new Go();
 const obs = new Subject();
 obs.subscribe(sim => {
-    let canvas = document.getElementById("draw");
+    if (current_sim_running < 0) { return; }
+    let canvas = canvases[current_sim_running];
     if (canvas.getContext) {
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"syscall/js"
 	"time"
@@ -11,8 +12,6 @@ import (
 
 //go:wasmimport howdy JsDo
 func JsDo()
-
-//func JsDo(i int32)
 
 type JSable interface {
 	tojs() js.Value
@@ -148,6 +147,7 @@ func (c Channel) tojs() js.Value {
 }
 
 type SimulationState struct {
+	tick      uint
 	databases []Database
 	clients   []Client
 	channels  []Channel
@@ -192,22 +192,23 @@ func receive(s *SimulationState, t *Transaction, e *Endpoint) {
 // 	}
 // }
 
-func update(tick uint, s *SimulationState) {
+func update(s *SimulationState) {
+	s.tick++
 	style := rand.Int() % 3
-	if tick == 200 {
+	if s.tick == 200 {
 
 		s.channels[0].sendWrite(true, triangle, ShapeState(style))
 	}
-	if tick == 600 {
+	if s.tick == 600 {
 		s.channels[0].sendWrite(true, square, ShapeState(style))
 	}
-	if tick == 1000 {
+	if s.tick == 1000 {
 		s.channels[0].sendWrite(true, circle, ShapeState(style))
 	}
-	if tick == 1400 {
+	if s.tick == 1400 {
 		s.channels[0].sendWrite(true, square, ShapeState(style))
 	}
-	if tick > 1400 && (tick-200)%400 == 0 {
+	if s.tick > 1400 && (s.tick-200)%400 == 0 {
 		shape := rand.Int() % 3
 		s.channels[0].sendWrite(true, Shape(shape), ShapeState(style))
 	}
@@ -242,7 +243,6 @@ const TICKS_PER_SECOND = 100.0
 const TIME_PER_TICK = time.Second / TICKS_PER_SECOND
 
 func main() {
-	var tick uint = 0
 	var time_at_prev_tick = time.Now()
 	sims := []SimulationState{make_intro_sim(), make_intro_sim()}
 	current_sim_idx := 0
@@ -250,7 +250,13 @@ func main() {
 	storeInJs := func(this js.Value, args []js.Value) any {
 		return sims[current_sim_idx].tojs()
 	}
+	setIdx := func(this js.Value, args []js.Value) any {
+		current_sim_idx = args[0].Int()
+		fmt.Println(current_sim_idx)
+		return js.Undefined()
+	}
 	js.Global().Set("callback", js.FuncOf(storeInJs))
+	js.Global().Set("setSimIndex", js.FuncOf(setIdx))
 
 	for {
 		time_to_next_tick_truncated := time_at_prev_tick.Add(TIME_PER_TICK).Sub(time.Now()).Truncate(time.Millisecond)
@@ -260,10 +266,13 @@ func main() {
 
 		time_after_sleep := time.Now()
 		for time_after_sleep.Sub(time_at_prev_tick) > TIME_PER_TICK {
-			tick++
-			update(tick, &sims[current_sim_idx])
-			JsDo()
 			time_at_prev_tick = time_at_prev_tick.Add(TIME_PER_TICK)
+			i := current_sim_idx
+			if i < 0 {
+				continue
+			}
+			update(&sims[i])
+			JsDo()
 		}
 	}
 }
