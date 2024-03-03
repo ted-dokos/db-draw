@@ -1,3 +1,3 @@
-module wasm-go
+module dbdraw
 
 go 1.22.0

@@ -3,37 +3,16 @@ import * as vector from './vector.js';
 import { createSolid, createHorizStripes, createVertStripes } from './patterns.js';
 import { unitCircle, unitSquare, unitTriangle } from './shapes.js';
 
-const CANVAS_WIDTH = 1920 - 160;
-const CANVAS_HEIGHT = 1080 - 90;
+const CANVAS_WIDTH = 1920 - 3*160;
+const CANVAS_HEIGHT = 1080 - 3*90;
 
 let canvases = document.getElementsByTagName("canvas");
-let current_sim_running = 0;
 for (let i = 0; i < canvases.length; i++) {
     let canvas = canvases[i];
     canvas.setAttribute('width', CANVAS_WIDTH.toString());
     canvas.setAttribute('height', CANVAS_HEIGHT.toString());
-    let intersection_observer = new IntersectionObserver(
-        (entries) => {
-            let entry = entries[0];
-            if (!window.setSimIndex) {
-                return;
-            }
-            console.log(i);
-            if (entry.intersectionRatio === 1.0) {
-                window.setSimIndex(i);
-                current_sim_running = i;
-            } else if (current_sim_running !== -1) {
-                window.setSimIndex(-1);
-                current_sim_running = -1;
-            }
-        },
-        /*options=*/ {
-            root: document.querySelector("#scrollArea"),
-            rootMargin: "0px",
-            threshold: [1.0, 0.95],
-        });
-    intersection_observer.observe(canvas);
 }
+let current_sim_running = 0;
 
 // Using the coordinate system from the golang side:
 // treat the canvas as the space [-max_x, max_x] X [-max_y, max_y].
@@ -196,3 +175,47 @@ WebAssembly.instantiateStreaming(fetch("bin/main.wasm"),
     go.importObject).then((result) => {
         go.run(result.instance);
     });
+
+function setSimIndex(idx) {
+    current_sim_running = idx;
+    window.setSimIndex(idx);
+}
+
+function observeCanvases() {
+    for (let i = 0; i < canvases.length; i++) {
+        let canvas = canvases[i];
+        let intersection_observer = new IntersectionObserver(
+            (entries) => {
+                let entry = entries[0];
+                if (!window.setSimIndex) {
+                    return;
+                }
+                if (entry.intersectionRatio === 1.0) {
+                    setSimIndex(i);
+                } else if (current_sim_running !== -1) {
+                    setSimIndex(-1);
+                }
+            },
+            /*options=*/ {
+                root: document.querySelector("#scrollArea"),
+                rootMargin: "0px",
+                threshold: [1.0, 0.95],
+            });
+        intersection_observer.observe(canvas);
+    }
+}
+
+function drawInitialSimStates() {
+    if (!window.setSimIndex) {
+        setTimeout(drawInitialSimStates, 0.5);
+        return;
+    }
+    for (let i = 0; i < canvases.length; i++) {
+        setSimIndex(i);
+        go.importObject.howdy.JsDo();
+    }
+    setSimIndex(-1);
+}
+drawInitialSimStates();
+observeCanvases();
+window.scrollBy(0,0);
