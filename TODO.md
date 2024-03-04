@@ -2,4 +2,4 @@
 -- https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame#browser_compatibility
 - Switch to typescript?
 -- Why is it so annoying to get the cli compiler
-- Make src folder
+- Improve channel drawing (draws bad on DBs)

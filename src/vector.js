@@ -6,7 +6,7 @@ export class Vector {
 }
 
 // Should be rotated 90 degrees clockwise.
-export function get_perp(v) {
+export function getPerp(v) {
     return new Vector(-v.y, v.x);
 }
 

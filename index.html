@@ -1,38 +1,49 @@
 <html>
-	<head>
-        <link rel="icon" href="data:;base64,=">
-		<meta charset="utf-8"/>
-		<script type="importmap">
+
+<head>
+	<link rel="icon" href="data:;base64,=">
+	<meta charset="utf-8" />
+	<script type="importmap">
 			{"imports": {"rxjs": "https://unpkg.com/@esm-bundle/rxjs/esm/es5/rxjs.min.js"}}
 		</script>
-		<script src="src/wasm_exec.js"></script>
-		<script type="module" src="src/patterns.js"></script>
-		<script type="module" src="src/vector.js"></script>
-		<script type="module" src="src/display.js"></script>
-		<style>
-			canvas {
-				margin-right: auto;
-				margin-left: auto;
-				display: block;
-			}
-			div.text {
-				margin-right: 30%;
-				margin-left: 30%;
-				display: block;
-			}
-		</style>
-	</head>
-	<body>
-		<div class="text">
-			We will start with a simple model for a database: it's a server that accepts interactions from clients.
-			<br>
-		</div>
-		<canvas id="draw"></canvas>
-		<div class="text">
-			<br>
-			This is some follow-up text.
-			<br>
-		</div>
-		<canvas id="draw"></canvas>
-	</body>
+	<script src="src/wasm_exec.js"></script>
+	<script type="module" src="src/patterns.js"></script>
+	<script type="module" src="src/vector.js"></script>
+	<style>
+		canvas {
+			margin-right: auto;
+			margin-left: auto;
+			display: block;
+		}
+
+		div.text {
+			margin-right: 30%;
+			margin-left: 30%;
+			display: block;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="text">
+		We will start with a simple model for a database: a server that responds to clients. Each request from a client
+		is called a transaction or request.
+		<br>
+	</div>
+	<canvas id="draw"></canvas>
+	<div class="text">
+		<br>
+		Multiple clients can talk to a database.
+		<br>
+	</div>
+	<canvas id="draw"></canvas>
+	<div class="text">
+		<br>
+		The above examples show clients sending write request to the database. Clients can also send read requests. The
+		database responds with the current state of the requested data.
+		<br>
+	</div>
+</body>
+<script type="module" src="src/display.js"></script>
+
 </html>

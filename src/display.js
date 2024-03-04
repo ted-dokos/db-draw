@@ -3,8 +3,8 @@ import * as vector from './vector.js';
 import { createSolid, createHorizStripes, createVertStripes } from './patterns.js';
 import { unitCircle, unitSquare, unitTriangle } from './shapes.js';
 
-const CANVAS_WIDTH = 1920 - 3*160;
-const CANVAS_HEIGHT = 1080 - 3*90;
+const CANVAS_WIDTH = 1920 - 3 * 160;
+const CANVAS_HEIGHT = 1080 - 3 * 90;
 
 let canvases = document.getElementsByTagName("canvas");
 for (let i = 0; i < canvases.length; i++) {
@@ -26,7 +26,7 @@ const CLIENT_BORDER = 3.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
 function toCanvasCoords(pos) {
     return new vector.Vector(
         (pos.x + GO_MAX_X) * (CANVAS_WIDTH / (2.0 * GO_MAX_X)),
-        (pos.y + GO_MAX_Y) * (CANVAS_HEIGHT / (2.0 * GO_MAX_Y)));
+        (-pos.y + GO_MAX_Y) * (CANVAS_HEIGHT / (2.0 * GO_MAX_Y)));
 }
 
 const ShapeMap = {
@@ -136,7 +136,11 @@ function drawChannels(sim, ctx) {
             let dist = vector.distance(pos3, pos4);
             let linepos = vector.add(pos3, vector.smult(dist * ch.outgoing.progress, vec));
             const PERP_DIST = -20.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
-            let trpos = vector.add(linepos, vector.smult(PERP_DIST, vector.get_perp(vec)));
+            let perp = vector.getPerp(vec);
+            if (perp.y < 0) {
+                perp = vector.smult(-1, perp);
+            }
+            let trpos = vector.add(linepos, vector.smult(PERP_DIST, perp));
             drawChannelTransaction(ch.outgoing, ctx, trpos);
         }
     }
@@ -173,6 +177,10 @@ WebAssembly.instantiateStreaming(fetch("bin/main.wasm"),
     });
 
 function setSimIndex(idx) {
+    if (!window.setSimIndex) {
+        setTimeout(() => { setSimIndex(idx); }, 10);
+        return;
+    }
     current_sim_running = idx;
     window.setSimIndex(idx);
 }
@@ -183,13 +191,12 @@ function observeCanvases() {
         let intersection_observer = new IntersectionObserver(
             (entries) => {
                 let entry = entries[0];
-                if (!window.setSimIndex) {
-                    return;
-                }
                 if (entry.intersectionRatio === 1.0) {
                     setSimIndex(i);
+                    return;
                 } else if (current_sim_running !== -1) {
                     setSimIndex(-1);
+                    return;
                 }
             },
             /*options=*/ {
@@ -203,7 +210,7 @@ function observeCanvases() {
 
 function drawInitialSimStates() {
     if (!window.setSimIndex) {
-        setTimeout(drawInitialSimStates, 0.5);
+        setTimeout(drawInitialSimStates, 10);
         return;
     }
     for (let i = 0; i < canvases.length; i++) {
@@ -214,4 +221,3 @@ function drawInitialSimStates() {
 }
 drawInitialSimStates();
 observeCanvases();
-window.scrollBy(0,0);

@@ -1,4 +1,4 @@
-package main
+package dbdraw
 
 import (
 	"math/rand"
