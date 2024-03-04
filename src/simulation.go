@@ -41,13 +41,24 @@ const (
 	absent
 )
 
+type DBData map[Shape]ShapeState
+
+type Endpoint interface {
+	JSable
+	Data() *DBData
+}
+
 type Database struct {
 	pos  Position
-	data map[Shape]ShapeState
+	data DBData
+}
+
+func (d Database) Data() *DBData {
+	return &d.data
 }
 
 func (d Database) tojs() js.Value {
-	getState := func(key Shape, mp map[Shape]ShapeState) ShapeState {
+	getState := func(key Shape, mp DBData) ShapeState {
 		v, present := mp[key]
 		if !present {
 			return absent
@@ -68,21 +79,13 @@ type Client struct {
 	pos Position
 }
 
+func (c Client) Data() *DBData {
+	return nil
+}
+
 func (c Client) tojs() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"pos": c.pos.tojs(),
-	})
-}
-
-type Endpoint struct {
-	ty  rune
-	idx uint
-}
-
-func (e Endpoint) tojs() js.Value {
-	return js.ValueOf(map[string]interface{}{
-		"type":  js.ValueOf(string(e.ty)),
-		"index": js.ValueOf(e.idx),
 	})
 }
 
@@ -141,12 +144,6 @@ func (c Channel) tojs() js.Value {
 	})
 }
 
-type ChannelEvent struct {
-	outgoing bool
-	shape    Shape
-	style    ShapeState
-}
-
 type SimulationState struct {
 	tick      uint
 	databases []Database
@@ -176,14 +173,15 @@ func (s SimulationState) tojs() js.Value {
 }
 
 func receive(s *SimulationState, t *Transaction, e *Endpoint) {
-	if e.ty == 'd' {
-		s.databases[e.idx].data[t.shape] = t.style
+	dbdata := (*e).Data()
+	if dbdata != nil {
+		(*dbdata)[t.shape] = t.style
 	}
 }
 
 func update(s *SimulationState) {
 	s.tick++
-	s.events.ProcessFrame(s.tick)
+	s.events.ProcessTick(s.tick)
 	// style := rand.Int() % 3
 	// if s.tick == 200 {
 
@@ -223,14 +221,27 @@ func update(s *SimulationState) {
 }
 
 func make_intro_sim() SimulationState {
-	dbs := []Database{{pos: Position{x: 0.5, y: 0.0}, data: make(map[Shape]ShapeState)}}
+	dbs := []Database{{pos: Position{x: 0.5, y: 0.0}, data: map[Shape]ShapeState{}}}
 	clients := []Client{{pos: Position{x: -0.5, y: 0.0}}}
-	chs := []Channel{{ep1: Endpoint{ty: 'c', idx: 0}, ep2: Endpoint{ty: 'd', idx: 0}, travel_time: 2.0}}
-	emitters := compose_emitters(OnceEmitter{tick: 100, emit: ChannelEmitter{c: &chs[0], c_evt: ChannelEvent{true, triangle, solid}}},
-		OnceEmitter{tick: 400, emit: ChannelEmitter{c: &chs[0], c_evt: ChannelEvent{true, square, hstripe}}},
-		OnceEmitter{tick: 700, emit: ChannelEmitter{c: &chs[0], c_evt: ChannelEvent{true, circle, vstripe}}},
-		PeriodicEmitter{first_tick: 1000, period: 300, emit: ChannelEmitter{c: &chs[0], c_evt: ChannelEvent{true, circle, solid}}},
-	)
+	chs := []Channel{{ep1: clients[0], ep2: dbs[0], travel_time: 2.0}}
+	emitters := compose_emitters(
+		OnceEmitter{
+			tick: 100,
+			emit: ChannelEmitter{c: &chs[0], outgoing: true, sendee: independent(triFunc, solidFunc)},
+		},
+		OnceEmitter{
+			tick: 400,
+			emit: ChannelEmitter{c: &chs[0], outgoing: true, sendee: independent(sqFunc, hstripeFunc)},
+		},
+		OnceEmitter{
+			tick: 700,
+			emit: ChannelEmitter{c: &chs[0], outgoing: true, sendee: independent(circFunc, vstripeFunc)},
+		},
+		PeriodicEmitter{
+			first_tick: 1000,
+			period:     300,
+			emit:       ChannelEmitter{c: &chs[0], outgoing: true, sendee: randShapeWithNewStyle},
+		})
 	return SimulationState{
 		0,
 		dbs,

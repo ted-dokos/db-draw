@@ -108,11 +108,7 @@ function drawClient(client, ctx) {
 }
 
 function getPosFromEndpoint(sim, ep) {
-    if (ep.type === 'd') {
-        return sim.databases[ep.index].pos;
-    } else {
-        return sim.clients[ep.index].pos;
-    }
+    return ep.pos;
 }
 
 function drawChannelTransaction(transaction, ctx, pos) {
