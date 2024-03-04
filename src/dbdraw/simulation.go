@@ -172,7 +172,7 @@ func (s SimulationState) ToJS() js.Value {
 	})
 }
 
-func receive(s *SimulationState, t *Transaction, e Endpoint) {
+func receive(t *Transaction, e Endpoint) {
 	dbdata := e.Data()
 	if dbdata != nil {
 		(*dbdata)[t.shape] = t.style
@@ -193,7 +193,7 @@ func Update(s *SimulationState) {
 				return dir
 			}
 			if dir.ty == write {
-				receive(s, dir, ep)
+				receive(dir, ep)
 			}
 			return nil
 		}
