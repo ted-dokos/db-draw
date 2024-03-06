@@ -11,12 +11,12 @@ type EventEmitter interface {
 type ChannelEmitter struct {
 	c        *Channel
 	outgoing bool
-	sendee   func(ChannelEmitter) (Shape, ShapeState)
+	sendee   func(ChannelEmitter) (Shape, RequestType)
 }
 
 func (emitter ChannelEmitter) ProcessTick(tick uint) {
-	shape, state := emitter.sendee(emitter)
-	emitter.c.sendWrite(emitter.outgoing, shape, state)
+	shape, req := emitter.sendee(emitter)
+	emitter.c.send(emitter.outgoing, shape, req)
 }
 
 type OnceEmitter struct {
@@ -71,7 +71,7 @@ func triFunc(ChannelEmitter) Shape {
 func randShape(ChannelEmitter) Shape {
 	return Shape(rand.Int() % 3)
 }
-func randShapeWithNewStyle(emitter ChannelEmitter) (Shape, ShapeState) {
+func randShapeWithNewStyle(emitter ChannelEmitter) (Shape, RequestType) {
 	ep := emitter.c.ep1
 	if emitter.outgoing {
 		ep = emitter.c.ep2
@@ -79,31 +79,35 @@ func randShapeWithNewStyle(emitter ChannelEmitter) (Shape, ShapeState) {
 	db := ep.Data()
 	shape := randShape(emitter)
 	if db == nil {
-		return shape, randStyle(emitter)
+		return shape, randWrite(emitter)
 	}
 	style, ok := (*db)[shape]
 	if !ok {
-		return shape, randStyle(emitter)
+		return shape, randWrite(emitter)
 	}
 	new := (int(style) + rand.Int()%2 + 1) % 3
-	return shape, ShapeState(new)
+	return shape, RequestType(new)
 }
 
-func solidFunc(ChannelEmitter) ShapeState {
+func solidFunc(ChannelEmitter) RequestType {
 	return solid
 }
-func hstripeFunc(ChannelEmitter) ShapeState {
+func hstripeFunc(ChannelEmitter) RequestType {
 	return hstripe
 }
-func vstripeFunc(ChannelEmitter) ShapeState {
+func vstripeFunc(ChannelEmitter) RequestType {
 	return vstripe
 }
-func randStyle(ChannelEmitter) ShapeState {
-	return ShapeState(rand.Int() % 3)
+func randWrite(ChannelEmitter) RequestType {
+	return RequestType(rand.Int() % 3)
 }
 
-func independent(shapeFunc func(ChannelEmitter) Shape, styleFunc func(ChannelEmitter) ShapeState) func(ChannelEmitter) (Shape, ShapeState) {
-	return func(emitter ChannelEmitter) (Shape, ShapeState) {
+func independent(shapeFunc func(ChannelEmitter) Shape, styleFunc func(ChannelEmitter) RequestType) func(ChannelEmitter) (Shape, RequestType) {
+	return func(emitter ChannelEmitter) (Shape, RequestType) {
 		return shapeFunc(emitter), styleFunc(emitter)
 	}
+}
+
+func randRead(emitter ChannelEmitter) (Shape, RequestType) {
+	return randShape(emitter), read
 }
