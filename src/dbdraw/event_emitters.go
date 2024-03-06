@@ -15,8 +15,8 @@ type ChannelEmitter struct {
 }
 
 func (emitter ChannelEmitter) ProcessTick(tick uint) {
-	shape, state := emitter.sendee(emitter)
-	emitter.c.send(emitter.outgoing, shape, state)
+	shape, req := emitter.sendee(emitter)
+	emitter.c.send(emitter.outgoing, shape, req)
 }
 
 type OnceEmitter struct {
@@ -79,11 +79,11 @@ func randShapeWithNewStyle(emitter ChannelEmitter) (Shape, RequestType) {
 	db := ep.Data()
 	shape := randShape(emitter)
 	if db == nil {
-		return shape, randStyle(emitter)
+		return shape, randWrite(emitter)
 	}
 	style, ok := (*db)[shape]
 	if !ok {
-		return shape, randStyle(emitter)
+		return shape, randWrite(emitter)
 	}
 	new := (int(style) + rand.Int()%2 + 1) % 3
 	return shape, RequestType(new)
@@ -98,7 +98,7 @@ func hstripeFunc(ChannelEmitter) RequestType {
 func vstripeFunc(ChannelEmitter) RequestType {
 	return vstripe
 }
-func randStyle(ChannelEmitter) RequestType {
+func randWrite(ChannelEmitter) RequestType {
 	return RequestType(rand.Int() % 3)
 }
 
@@ -106,4 +106,8 @@ func independent(shapeFunc func(ChannelEmitter) Shape, styleFunc func(ChannelEmi
 	return func(emitter ChannelEmitter) (Shape, RequestType) {
 		return shapeFunc(emitter), styleFunc(emitter)
 	}
+}
+
+func randRead(emitter ChannelEmitter) (Shape, RequestType) {
+	return randShape(emitter), read
 }

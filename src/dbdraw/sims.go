@@ -35,6 +35,36 @@ func Sim1() SimulationState {
 
 func Sim2() SimulationState {
 	dbs := []Database{{
+		pos: Position{x: 0.3, y: 0.0},
+		data: map[Shape]RequestType{
+			circle:   solid,
+			square:   hstripe,
+			triangle: vstripe}},
+	}
+	clients := []Client{
+		{Position{-0.3, 0.0}},
+	}
+	channels := []Channel{
+		{ep1: &clients[0], ep2: &dbs[0], travelTime: 1.0},
+	}
+	emitters := compose_emitters(
+		PeriodicEmitter{
+			first_tick: 100,
+			period:     300,
+			emit:       ChannelEmitter{c: &channels[0], outgoing: true, sendee: randRead},
+		},
+	)
+	return SimulationState{
+		0,
+		dbs,
+		clients,
+		channels,
+		emitters,
+	}
+}
+
+func Sim3() SimulationState {
+	dbs := []Database{{
 		pos: Position{x: 0.0, y: 0.25},
 		data: map[Shape]RequestType{
 			circle:   solid,

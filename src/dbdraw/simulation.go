@@ -35,6 +35,7 @@ const (
 var shapeNames = [...]string{"circle", "square", "triangle"}
 
 type RequestType uint
+type ShapeState RequestType
 
 const (
 	// write requests
@@ -47,9 +48,15 @@ const (
 
 type DBData map[Shape]RequestType
 
+type Response struct {
+	shape Shape
+	state ShapeState
+}
+
 type Endpoint interface {
 	JSable
 	Data() *DBData
+	Receive(p Packet) *Response
 }
 
 type Database struct {
@@ -59,6 +66,13 @@ type Database struct {
 
 func (d *Database) Data() *DBData {
 	return &d.data
+}
+
+func (d *Database) Receive(p Packet) *Response {
+	if p.req != read {
+		d.data[p.shape] = p.req
+	}
+	return &Response{p.shape, ShapeState(d.data[p.shape])}
 }
 
 func (d *Database) ToJS() js.Value {
@@ -80,6 +94,10 @@ func (c *Client) Data() *DBData {
 	return nil
 }
 
+func (c *Client) Receive(p Packet) *Response {
+	return nil
+}
+
 func (c *Client) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"pos": c.pos.ToJS(),
@@ -97,7 +115,7 @@ func (t Packet) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"progress": js.ValueOf(t.progress),
 		"shape":    js.ValueOf(uint(t.shape)),
-		"style":    js.ValueOf(uint(t.req)),
+		"request":  js.ValueOf(uint(t.req)),
 	})
 }
 
@@ -161,30 +179,34 @@ func (s SimulationState) ToJS() js.Value {
 	})
 }
 
-func receive(t *Packet, e Endpoint) {
-	dbdata := e.Data()
-	if dbdata != nil {
-		(*dbdata)[t.shape] = t.req
-	}
-}
-
 func Update(s *SimulationState) {
 	s.tick++
 	s.events.ProcessTick(s.tick)
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]
-		updateDir := func(dir *Packet, ep Endpoint) *Packet {
-			if dir == nil {
+		updateDir := func(ch *Channel, outgoing bool) *Response {
+			ep := ch.ep1
+			p := &ch.incoming
+			if outgoing {
+				ep = ch.ep2
+				p = &ch.outgoing
+			}
+			if *p == nil {
 				return nil
 			}
-			dir.progress += TIME_PER_TICK.Seconds() / ch.travelTime
-			if dir.progress < 1.0 {
-				return dir
+			(**p).progress += TIME_PER_TICK.Seconds() / ch.travelTime
+			if (**p).progress < 1.0 {
+				return nil
 			}
-			receive(dir, ep)
-			return nil
+			resp := ep.Receive(**p)
+			*p = nil
+			return resp
 		}
-		ch.outgoing = updateDir(ch.outgoing, ch.ep2)
-		ch.incoming = updateDir(ch.incoming, ch.ep1)
+		if resp := updateDir(ch, true); resp != nil {
+			ch.send(false, resp.shape, RequestType(resp.state))
+		}
+		if resp := updateDir(ch, false); resp != nil {
+			ch.send(true, resp.shape, RequestType(resp.state))
+		}
 	}
 }

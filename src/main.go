@@ -14,7 +14,10 @@ func JsDo()
 
 func main() {
 	var time_at_prev_tick = time.Now()
-	sims := []dbdraw.SimulationState{dbdraw.Sim1(), dbdraw.Sim2()}
+	sims := []dbdraw.SimulationState{dbdraw.Sim1(),
+		dbdraw.Sim2(),
+		dbdraw.Sim3(),
+	}
 	current_sim_idx := 0
 
 	storeInJs := func(this js.Value, args []js.Value) any {

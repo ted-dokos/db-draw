@@ -1,6 +1,6 @@
 import { Subject } from 'rxjs';
 import * as vector from './vector.js';
-import { createSolid, createHorizStripes, createVertStripes } from './patterns.js';
+import { createSolid, createHorizStripes, createVertStripes, createQuestionMark } from './patterns.js';
 import { unitCircle, unitSquare, unitTriangle } from './shapes.js';
 
 const CANVAS_WIDTH = 1920 - 3 * 160;
@@ -53,22 +53,22 @@ function getShapePath(shape) {
     }
 }
 
-function getStylePattern(context, style) {
-    switch (style) {
-        case 0: // solid
+function getStylePattern(context, request) {
+    switch (request) {
+        case 0: // write request, solid
             return createSolid(context, "#FFC107");;
-        case 1: // horiz stripes
+        case 1: // write request, horiz stripes
             return createHorizStripes(context);;
-        case 2: // vert stripes
+        case 2: // write request, stripes
             return createVertStripes(context);;
-        default: // absent
-            return null;
+        default: // read request
+            return createQuestionMark(context);
     }
 }
 
 function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
     let transform = { a: scale, d: scale, e: pos.x, f: pos.y };
-    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: 1 };
+    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: -0.4, f: -0.7};
     context.setTransform(transform);
     style_pattern.setTransform(pattern_transform);
     context.fillStyle = style_pattern;
@@ -111,10 +111,10 @@ function getPosFromEndpoint(sim, ep) {
     return ep.pos;
 }
 
-function drawChannelTransaction(transaction, ctx, pos) {
+function drawChannelPacket(packet, ctx, pos) {
     ctx.save();
     const TRANSFORM_SCALE = 12.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(transaction.shape), getStylePattern(ctx, transaction.style));
+    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(packet.shape), getStylePattern(ctx, packet.request));
     ctx.restore();
 }
 
@@ -134,14 +134,25 @@ function drawChannels(sim, ctx) {
         ctx.stroke();
         if (ch.outgoing !== null) {
             let dist = vector.distance(pos3, pos4);
-            let linepos = vector.add(pos3, vector.smult(dist * ch.outgoing.progress, vec));
+            let linePos = vector.add(pos3, vector.smult(dist * ch.outgoing.progress, vec));
             const PERP_DIST = -20.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
             let perp = vector.getPerp(vec);
             if (perp.y < 0) {
                 perp = vector.smult(-1, perp);
             }
-            let trpos = vector.add(linepos, vector.smult(PERP_DIST, perp));
-            drawChannelTransaction(ch.outgoing, ctx, trpos);
+            let packetPos = vector.add(linePos, vector.smult(PERP_DIST, perp));
+            drawChannelPacket(ch.outgoing, ctx, packetPos);
+        }
+        if (ch.incoming !== null) {
+            let dist = vector.distance(pos3, pos4);
+            let linePos = vector.add(pos4, vector.smult(-dist * ch.incoming.progress, vec));
+            const PERP_DIST = -20.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
+            let perp = vector.getPerp(vec);
+            if (perp.y >= 0) {
+                perp = vector.smult(-1, perp);
+            }
+            let packetPos = vector.add(linePos, vector.smult(PERP_DIST, perp));
+            drawChannelPacket(ch.incoming, ctx, packetPos);
         }
     }
 }
