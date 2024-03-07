@@ -10,7 +10,9 @@ let canvases = document.getElementsByTagName("canvas");
 for (let i = 0; i < canvases.length; i++) {
     let canvas = canvases[i];
     canvas.setAttribute('width', CANVAS_WIDTH.toString());
-    canvas.setAttribute('height', CANVAS_HEIGHT.toString());
+    if (canvas.getAttribute('height') === null) {
+        canvas.setAttribute('height', CANVAS_HEIGHT.toString());
+    }
 }
 let current_sim_running = 0;
 
@@ -18,15 +20,15 @@ let current_sim_running = 0;
 // treat the canvas as the space [-max_x, max_x] X [-max_y, max_y].
 const REFERENCE_WIDTH = 1024.0;
 const GO_MAX_X = 2.0;
-const GO_MAX_Y = GO_MAX_X * CANVAS_HEIGHT / CANVAS_WIDTH;
 
 const CLIENT_RADIUS = 25 * CANVAS_WIDTH / REFERENCE_WIDTH;
 const CLIENT_BORDER = 3.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
 
-function toCanvasCoords(pos) {
+function toCanvasCoords(pos, canvas) {
+    const GO_MAX_Y = GO_MAX_X * canvas.height / CANVAS_WIDTH;
     return new vector.Vector(
         (pos.x + GO_MAX_X) * (CANVAS_WIDTH / (2.0 * GO_MAX_X)),
-        (-pos.y + GO_MAX_Y) * (CANVAS_HEIGHT / (2.0 * GO_MAX_Y)));
+        (-pos.y + GO_MAX_Y) * (canvas.height / (2.0 * GO_MAX_Y)));
 }
 
 const ShapeMap = {
@@ -77,11 +79,12 @@ function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
     context.stroke(shape_path);
 }
 
+const DB_WIDTH = GO_MAX_X * 37.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
+const DB_HEIGHT = GO_MAX_X * 50 * CANVAS_WIDTH / REFERENCE_WIDTH;
+const DB_BORDER = GO_MAX_X * 1.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
+
 function drawDB(db, ctx) {
-    const DB_WIDTH = GO_MAX_X * 37.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    const DB_HEIGHT = GO_MAX_X * 50 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    const DB_BORDER = GO_MAX_X * 1.5 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    let db_pos = toCanvasCoords(db.pos);
+    let db_pos = toCanvasCoords(db.pos, ctx.canvas);
     ctx.fillRect(db_pos.x - DB_WIDTH / 2.0, db_pos.y - DB_HEIGHT / 2.0, DB_WIDTH, DB_HEIGHT);
     ctx.clearRect(db_pos.x - DB_WIDTH / 2.0 + DB_BORDER,
         db_pos.y - DB_HEIGHT / 2.0 + DB_BORDER,
@@ -100,7 +103,7 @@ function drawDB(db, ctx) {
 }
 
 function drawClient(client, ctx) {
-    let client_pos = toCanvasCoords(client.pos);
+    let client_pos = toCanvasCoords(client.pos, ctx.canvas);
     ctx.beginPath();
     ctx.arc(client_pos.x, client_pos.y, CLIENT_RADIUS - CLIENT_BORDER / 2.0, 0, 2 * Math.PI);
     ctx.lineWidth = CLIENT_BORDER;
@@ -131,12 +134,13 @@ function drawChannels(sim, ctx) {
     ctx.beginPath();
     for (let i = 0; i < sim.channels.length; i++) {
         let ch = sim.channels[i];
-        let pos1 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep1));
-        let pos2 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep2));
+        let pos1 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep1), ctx.canvas);
+        let pos2 = toCanvasCoords(getPosFromEndpoint(sim, ch.ep2), ctx.canvas);
         let vec = vector.normalize({ x: pos2.x - pos1.x, y: pos2.y - pos1.y });
-        let buffer = 1.4 * CLIENT_RADIUS;
-        let pos3 = vector.add(pos1, vector.smult(buffer, vec));
-        let pos4 = vector.add(pos2, vector.smult(-buffer, vec));
+        let buffer1 = 1.4 * CLIENT_RADIUS;
+        let pos3 = vector.add(pos1, vector.smult(buffer1, vec));
+        let buffer2 = 1.2 * DB_HEIGHT / 2;
+        let pos4 = vector.add(pos2, vector.smult(-buffer2, vec));
         ctx.moveTo(pos3.x, pos3.y);
         ctx.lineTo(pos4.x, pos4.y);
         ctx.lineWidth = 3.0 * CANVAS_WIDTH / REFERENCE_WIDTH;

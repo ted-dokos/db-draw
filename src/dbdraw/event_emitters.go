@@ -130,3 +130,10 @@ func randRead(emitter ChannelEmitter) Request {
 		shape:   randShape(emitter),
 	}
 }
+
+func randReadOrWrite(emitter ChannelEmitter) Request {
+	return Request{
+		reqType: RequestType(rand.Int() % 2),
+		shape:   randShape(emitter),
+	}
+}

@@ -17,6 +17,12 @@ type Position struct {
 	y float64
 }
 
+func (p Position) scale(s float64) Position {
+	p.x *= s
+	p.y *= s
+	return p
+}
+
 func (p Position) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"x": js.ValueOf(p.x),
@@ -160,6 +166,7 @@ type Channel struct {
 	travelTime float64
 	outgoing   *Packet
 	incoming   *Packet
+	invisible  bool
 }
 
 func (c *Channel) sendRequest(outgoing bool, r Request) {
