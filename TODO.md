@@ -3,4 +3,4 @@
 - Switch to typescript?
 -- Why is it so annoying to get the cli compiler
 - Improve channel drawing (draws bad on DBs)
-- Refactor requests back into a product of read/write and state.
+- Make responses more interesting: ok/err status for write/delete operations.
