@@ -68,7 +68,7 @@ function getStylePattern(context, request) {
 
 function drawShapeWithStyle(context, pos, scale, shape_path, style_pattern) {
     let transform = { a: scale, d: scale, e: pos.x, f: pos.y };
-    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: -0.4, f: -0.7};
+    let pattern_transform = { a: 1 / scale, d: 1 / scale, e: -0.4, f: -0.7 };
     context.setTransform(transform);
     style_pattern.setTransform(pattern_transform);
     context.fillStyle = style_pattern;
@@ -114,7 +114,16 @@ function getPosFromEndpoint(sim, ep) {
 function drawChannelPacket(packet, ctx, pos) {
     ctx.save();
     const TRANSFORM_SCALE = 12.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    drawShapeWithStyle(ctx, pos, TRANSFORM_SCALE, getShapePath(packet.shape), getStylePattern(ctx, packet.request));
+    if (packet.contentType == 0) { // request
+        drawShapeWithStyle(
+            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.content.shape),
+            getStylePattern(ctx, packet.content.writeState));
+    } else if (packet.contentType == 1) { // response
+        drawShapeWithStyle(
+            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.content.shape),
+            getStylePattern(ctx, packet.content.state));
+    }
+    
     ctx.restore();
 }
 

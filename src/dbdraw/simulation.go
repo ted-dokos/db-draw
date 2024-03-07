@@ -35,29 +35,56 @@ const (
 var shapeNames = [...]string{"circle", "square", "triangle"}
 
 type RequestType uint
-type ShapeState RequestType
+type ShapeState uint
 
 const (
-	// write requests
-	solid RequestType = iota
+	solid ShapeState = iota
 	hstripe
 	vstripe
-	// read request
-	read
+)
+const (
+	read RequestType = iota
+	write
 )
 
-type DBData map[Shape]RequestType
+type Request struct {
+	reqType RequestType
+	shape   Shape
+	// Only used for write requests
+	writeState ShapeState
+}
+
+func (r Request) ToJS() js.Value {
+	v := map[string]interface{}{
+		"reqType": js.ValueOf(uint(r.reqType)),
+		"shape":   js.ValueOf(uint(r.shape)),
+	}
+	if r.reqType == write {
+		v["writeState"] = js.ValueOf(uint(r.writeState))
+	}
+	return js.ValueOf(v)
+}
 
 type Response struct {
 	shape Shape
 	state ShapeState
 }
 
+func (r Response) ToJS() js.Value {
+	return js.ValueOf(map[string]any{
+		"shape": js.ValueOf(uint(r.shape)),
+		"state": js.ValueOf(uint(r.state)),
+	})
+}
+
 type Endpoint interface {
 	JSable
 	Data() *DBData
-	Receive(p Packet) *Response
+	ReceiveRequest(r Request) Response
+	ReceiveResponse(r Response)
 }
+
+type DBData map[Shape]ShapeState
 
 type Database struct {
 	pos  Position
@@ -68,13 +95,14 @@ func (d *Database) Data() *DBData {
 	return &d.data
 }
 
-func (d *Database) Receive(p Packet) *Response {
-	if p.req != read {
-		d.data[p.shape] = p.req
+func (d Database) ReceiveRequest(r Request) Response {
+	if r.reqType == read {
+		return Response{r.shape, ShapeState(d.data[r.shape])}
 	}
-	return &Response{p.shape, ShapeState(d.data[p.shape])}
+	d.data[r.shape] = r.writeState
+	return Response{r.shape, ShapeState(d.data[r.shape])}
 }
-
+func (d Database) ReceiveResponse(r Response) {}
 func (d *Database) ToJS() js.Value {
 	data := map[string]interface{}{}
 	for shape, reqType := range d.data {
@@ -94,9 +122,10 @@ func (c *Client) Data() *DBData {
 	return nil
 }
 
-func (c *Client) Receive(p Packet) *Response {
-	return nil
+func (c Client) ReceiveRequest(r Request) Response {
+	panic("Client::ReceiveRequest is not implemented.")
 }
+func (c Client) ReceiveResponse(r Response) {}
 
 func (c *Client) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
@@ -104,18 +133,24 @@ func (c *Client) ToJS() js.Value {
 	})
 }
 
-// Information packet that travels along a Channel.
+type PacketContentsType uint
+
+const (
+	request PacketContentsType = iota
+	response
+)
+
 type Packet struct {
-	progress float64
-	shape    Shape
-	req      RequestType
+	progress    float64
+	contentType PacketContentsType
+	contents    JSable
 }
 
-func (t Packet) ToJS() js.Value {
+func (p Packet) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
-		"progress": js.ValueOf(t.progress),
-		"shape":    js.ValueOf(uint(t.shape)),
-		"request":  js.ValueOf(uint(t.req)),
+		"progress":    js.ValueOf(p.progress),
+		"contentType": js.ValueOf(uint(p.contentType)),
+		"content":     p.contents.ToJS(),
 	})
 }
 
@@ -127,12 +162,18 @@ type Channel struct {
 	incoming   *Packet
 }
 
-func (c *Channel) send(outgoing bool, shape Shape, style RequestType) {
-	t := Packet{progress: 0.0, shape: shape, req: style}
+func (c *Channel) sendRequest(outgoing bool, r Request) {
 	if outgoing {
-		c.outgoing = &t
+		c.outgoing = &Packet{0.0, request, &r}
 	} else {
-		c.incoming = &t
+		c.incoming = &Packet{0.0, request, &r}
+	}
+}
+func (c *Channel) sendResponse(outgoing bool, r Response) {
+	if outgoing {
+		c.outgoing = &Packet{0.0, response, &r}
+	} else {
+		c.incoming = &Packet{0.0, response, &r}
 	}
 }
 func (c Channel) ToJS() js.Value {
@@ -184,7 +225,7 @@ func Update(s *SimulationState) {
 	s.events.ProcessTick(s.tick)
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]
-		updateDir := func(ch *Channel, outgoing bool) *Response {
+		updateDir := func(ch *Channel, outgoing bool) {
 			ep := ch.ep1
 			p := &ch.incoming
 			if outgoing {
@@ -192,21 +233,22 @@ func Update(s *SimulationState) {
 				p = &ch.outgoing
 			}
 			if *p == nil {
-				return nil
+				return
 			}
-			(**p).progress += TIME_PER_TICK.Seconds() / ch.travelTime
-			if (**p).progress < 1.0 {
-				return nil
+			(*p).progress += TIME_PER_TICK.Seconds() / ch.travelTime
+			if (*p).progress < 1.0 {
+				return
 			}
-			resp := ep.Receive(**p)
+			switch (*p).contentType {
+			case request:
+				resp := ep.ReceiveRequest(*(*p).contents.(*Request))
+				ch.sendResponse(!outgoing, resp)
+			case response:
+				ep.ReceiveResponse(*(*p).contents.(*Response))
+			}
 			*p = nil
-			return resp
 		}
-		if resp := updateDir(ch, true); resp != nil {
-			ch.send(false, resp.shape, RequestType(resp.state))
-		}
-		if resp := updateDir(ch, false); resp != nil {
-			ch.send(true, resp.shape, RequestType(resp.state))
-		}
+		updateDir(ch, true)
+		updateDir(ch, false)
 	}
 }

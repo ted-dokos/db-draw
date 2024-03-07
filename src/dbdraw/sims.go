@@ -3,7 +3,7 @@ package dbdraw
 // Same order as they appear on the page.
 
 func Sim1() SimulationState {
-	dbs := []Database{{pos: Position{x: 0.5, y: 0.0}, data: map[Shape]RequestType{}}}
+	dbs := []Database{{pos: Position{x: 0.5, y: 0.0}, data: DBData{}}}
 	clients := []Client{{pos: Position{x: -0.5, y: 0.0}}}
 	chs := []Channel{{ep1: &clients[0], ep2: &dbs[0], travelTime: 2.0}}
 	emitters := compose_emitters(
@@ -36,7 +36,7 @@ func Sim1() SimulationState {
 func Sim2() SimulationState {
 	dbs := []Database{{
 		pos: Position{x: 0.3, y: 0.0},
-		data: map[Shape]RequestType{
+		data: DBData{
 			circle:   solid,
 			square:   hstripe,
 			triangle: vstripe}},
@@ -66,7 +66,7 @@ func Sim2() SimulationState {
 func Sim3() SimulationState {
 	dbs := []Database{{
 		pos: Position{x: 0.0, y: 0.25},
-		data: map[Shape]RequestType{
+		data: DBData{
 			circle:   solid,
 			square:   hstripe,
 			triangle: vstripe}},
