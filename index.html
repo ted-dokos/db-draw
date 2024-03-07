@@ -20,28 +20,150 @@
 			margin-right: 30%;
 			margin-left: 30%;
 			display: block;
+			font-family: "Open Sans", sans-serif;
+			font-size: 1.3em;
 		}
 	</style>
 </head>
 
 <body>
 	<div class="text">
-		We will start with a simple model for a database: a server that responds to clients.
-		<br>
+		<h1>Introduction</h1>
+		<p>
+			I wrote this because I don't know how distributed databases work in practice.
+			In the past I had "read" the bigtable paper and the Paxos paper,
+			but I never felt like I understood things well.
+		</p>
+		<p>
+			As you read through this, keep some examples of large databases in mind.
+			Some examples I like are:
+		</p>
+		<ul>
+			<li>
+				The database backing a photo sharing app, like Google Photos.
+				User's photos are stored in the cloud,
+				and can be kept private, or shared with other users via albums.
+			</li>
+			<li>
+				A database for banking accounts.
+				Some accounts will not let you withdraw money
+				if the transaction takes the account below zero.
+				Protecting against race conditions becomes important.
+				<!-- For example, you and your spouse might be on different continents this week.
+				If you both simultaneously try to withdraw all the money from your shared account,
+				one of those transactions should fail.
+				If they both go through, the bank has lost money. -->
+			</li>
+			<li>
+				Different kinds of video streaming services,
+				like YouTube, Netflix, or Twitch.
+			</li>
+		</ul>
+		<h1>Our model</h1>
+		<p>
+			We will start with a simple model for a database.
+			We can envision it as a single server that stores its data in memory.
+			Each client has a channel of communication to the database,
+			and can send read, write, or delete requests.
+		</p>
+	</div>
+	<canvas id="draw" height="500"></canvas>
+	<div class="text">
+		<p>
+			This database is <u>consistent</u>:
+			two identical read requests that arrive at the same time will give identical answers.
+			However, it has a number of drawbacks:
+		</p>
+		<ol>
+			<li>
+				There is a single point of failure.
+				If the server crashes, all clients are locked out until the server comes back online.
+			</li>
+			<li>
+				A client might be unable to reach this particular server,
+				intermittently or permanently.
+				A client could also have a slow connection to the server:
+				a server in America will have long communication times for a client in Asia.
+			</li>
+			<li>
+				The number of clients is limited by the server processing power.
+				A huge number of clients could overwhelm the server.
+			</li>
+			<li>
+				The database is limited by the server memory.
+				A huge database might not fit in RAM or even in disk space.
+			</li>
+		</ol>
+		<h1>Appetizer: sharding</h1>
+		<p>
+			Drawback #4 above can be handled by <u>sharding</u> the data.
+			A large dataset is broken up into manageable chunks,
+			and each chunk is served independently.
+		</p>
+	</div>
+	<canvas id="draw" height="500"></canvas>
+	<div class="text">
+		<p>
+			Sharding introduces complexity around managing data and routing clients.
+			If some data is needed by all users,
+			we could replicate the data in each shard,
+			or provide a secondary connection to where that data lives.
+			And a client who cares about circle data won't be happy
+			if they're connected to the square-only database.
+		</p>
+		<p>
+			Sharding works well when clients are focused on small subsets of the data.
+			This is often the case in consumer-targeted applications.
+			Let's see how our examples work with sharding:
+		</p>
+		<ul>
+			<li>
+				Photo sharing app: we can store all of a user's owned photos on the same shard,
+				unless they have a huge amount of photos.
+				Shared albums usually have a small number of participants and contributors.
+				The participants could also be grouped onto the same shard.
+				However, a shared album with many particiants and many photos could be an issue.
+			</li>
+			<li>
+				Bank accounts: accounts rarely have more than a few owners,
+				and a user rarely owns more than a few accounts.
+				Grouping connected owners and accounts together
+				should therefore result in small clusters of related data,
+				a good fit for sharding.
+			<li>
+				Streaming services: each client is only watching 1 to 3 videos at a time.
+				Sharding on a per-video basis makes a lot of sense.
+			</li>
+		</ul>
+		<p>
+			Sharding data is a useful trick in the design of systems.
+			It can be applied independently of the next subject, replication.
+		</p>
+		<h1>Main entree: replication</h1>
+		<p>
+			Drawbacks #1-3 above can all be improved
+			by <u>replicating</u> the data across multiple servers.
+		</p>
 	</div>
 	<canvas id="draw"></canvas>
 	<div class="text">
-		<br>
-		Clients can also send read requests. The database responds with the current state of the requested data.
-		<br>
+		<h1>Resources</h1>
+		<ul>
+			<li>
+				Sharding
+				<ul>
+					<li>
+						<a href="https://en.wikipedia.org/wiki/Shard_(database_architecture)">Wikipedia</a>
+					</li>
+					<li>
+						<a href="https://aws.amazon.com/what-is/database-sharding/">
+							AWS: What is database sharding?
+						</a>
+					</li>
+				</ul>
+			</li>
+		</ul>
 	</div>
-	<canvas id="draw"></canvas>
-	<div class="text">
-		<br>
-		Multiple clients can talk to a database.
-		<br>
-	</div>
-	<canvas id="draw"></canvas>
 </body>
 <script type="module" src="src/display.js"></script>
 
