@@ -90,11 +90,9 @@ func Sim2() SimulationState {
 }
 
 func Sim3() SimulationState {
-	dbPosScale := 0.4
-	sin := math.Sqrt(3) / 2.0
 	dbs := []Database{
 		{
-			pos: Position{x: 1.0, y: 0.0}.scale(dbPosScale),
+			pos: Position{x: -0.3, y: 0.0},
 			data: DBData{
 				circle:   solid,
 				square:   hstripe,
@@ -102,15 +100,7 @@ func Sim3() SimulationState {
 			},
 		},
 		{
-			pos: Position{x: -0.5, y: sin}.scale(dbPosScale),
-			data: DBData{
-				circle:   solid,
-				square:   hstripe,
-				triangle: vstripe,
-			},
-		},
-		{
-			pos: Position{x: -0.5, y: -sin}.scale(dbPosScale),
+			pos: Position{x: 0.3, y: 0.0},
 			data: DBData{
 				circle:   solid,
 				square:   hstripe,
@@ -119,25 +109,83 @@ func Sim3() SimulationState {
 		},
 	}
 	clients := []Client{
-		{Position{1.0, 0.0}},
-		{Position{-0.8, dbs[1].pos.y}},
-		{Position{-0.8, dbs[2].pos.y}},
+		{Position{-0.8, 0.3}},
+		{Position{-0.8, -0.3}},
+		{Position{0.8, 0.3}},
+		{Position{0.8, -0.3}},
 	}
 	channels := []Channel{
 		{ep1: &clients[0], ep2: &dbs[0], travelTime: 2.0},
-		{ep1: &clients[1], ep2: &dbs[1], travelTime: 2.0},
-		{ep1: &clients[2], ep2: &dbs[2], travelTime: 2.0},
+		{ep1: &clients[1], ep2: &dbs[0], travelTime: 2.0},
+		{ep1: &clients[2], ep2: &dbs[1], travelTime: 2.0},
+		{ep1: &clients[3], ep2: &dbs[1], travelTime: 2.0},
 	}
 	emitters := compose_emitters(
 		PeriodicEmitter{
 			first_tick: 100,
 			period:     300,
-			emit:       ChannelEmitter{c: &channels[0], outgoing: true, sendee: randShapeWithNewStyle},
+			emit:       ChannelEmitter{c: &channels[0], outgoing: true, sendee: randRead},
 		},
 		PeriodicEmitter{
-			first_tick: 200,
+			first_tick: 175,
 			period:     300,
-			emit:       ChannelEmitter{c: &channels[1], outgoing: true, sendee: randShapeWithNewStyle},
+			emit:       ChannelEmitter{c: &channels[1], outgoing: true, sendee: randRead},
+		},
+		PeriodicEmitter{
+			first_tick: 250,
+			period:     300,
+			emit:       ChannelEmitter{c: &channels[2], outgoing: true, sendee: randRead},
+		},
+		PeriodicEmitter{
+			first_tick: 325,
+			period:     300,
+			emit:       ChannelEmitter{c: &channels[3], outgoing: true, sendee: randRead},
+		},
+	)
+	return SimulationState{
+		0,
+		dbs,
+		clients,
+		channels,
+		emitters,
+	}
+}
+
+func Sim4() SimulationState {
+	dbs := []Database{
+		{
+			pos: Position{x: -0.3, y: 0.0},
+			data: DBData{
+				circle:   solid,
+				square:   hstripe,
+				triangle: vstripe,
+			},
+		},
+		{
+			pos: Position{x: 0.3, y: 0.0},
+			data: DBData{
+				circle:   solid,
+				square:   hstripe,
+				triangle: vstripe,
+			},
+		},
+	}
+	clients := []Client{
+		{Position{-0.8, 0.3}},
+		{Position{-0.8, -0.3}},
+		{Position{0.8, 0.3}},
+		{Position{0.8, -0.3}},
+	}
+	channels := []Channel{
+		{ep1: &clients[0], ep2: &dbs[0], travelTime: 2.0},
+		{ep1: &clients[1], ep2: &dbs[0], travelTime: 2.0},
+		{ep1: &clients[2], ep2: &dbs[1], travelTime: 2.0},
+		{ep1: &clients[3], ep2: &dbs[1], travelTime: 2.0},
+	}
+	emitters := compose_emitters(
+		OnceEmitter{
+			tick: 100,
+			emit: ChannelEmitter{c: &channels[0], outgoing: true, sendee: randShapeWithNewStyle},
 		},
 	)
 	return SimulationState{

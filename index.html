@@ -64,7 +64,7 @@
 			We will start with a simple model for a database.
 			We can envision it as a single server that stores its data in memory.
 			Each client has a channel of communication to the database,
-			and can send read, write, or delete requests.
+			and can send read or write requests.
 		</p>
 	</div>
 	<canvas id="draw" height="500"></canvas>
@@ -131,7 +131,7 @@
 				should therefore result in small clusters of related data,
 				a good fit for sharding.
 			<li>
-				Streaming services: each client is only watching 1 to 3 videos at a time.
+				Streaming services: each client is only watching one video at a time.
 				Sharding on a per-video basis makes a lot of sense.
 			</li>
 		</ul>
@@ -142,10 +142,37 @@
 		<h1>Main entree: replication</h1>
 		<p>
 			Drawbacks #1-3 above can all be improved
-			by <u>replicating</u> the data across multiple servers.
+			by <u>replicating</u> the data across multiple servers:
+			<ol>
+				<li>
+					No more single point of failure.
+					If a replica crashes, clients can connect to a different replica
+					and continue interacting with the database.
+				</li>
+				<li>
+					A client can access the database as long as one replica is reachable.
+					Under normal conditions,
+					the client can use the "closest" replica,
+					meaning the one with the shortest travel time for communication.
+				</li>
+				<li>
+					Client traffic can be split among replicas.
+					A load balancer can direct clients
+					and prevent replicas from becoming overwhelmed.
+				</li>
+			</ol>
 		</p>
 	</div>
-	<canvas id="draw"></canvas>
+	<canvas id="draw" height="350"></canvas>
+	<div class="text">
+		<p>
+			However, replication is not a simple win.
+			In the above example, every client is only sending read requests.
+			Requests that change the state of the database introduce a challenge:
+			how do we keep the replicas in sync?
+		</p>
+	</div>
+	<canvas id="draw" height="350"></canvas>
 	<div class="text">
 		<h1>Resources</h1>
 		<ul>

@@ -17,6 +17,7 @@ func main() {
 	sims := []dbdraw.SimulationState{dbdraw.Sim1(),
 		dbdraw.Sim2(),
 		dbdraw.Sim3(),
+		dbdraw.Sim4(),
 	}
 	current_sim_idx := 0
 

@@ -114,19 +114,30 @@ function getPosFromEndpoint(sim, ep) {
     return ep.pos;
 }
 
+function drawStatusCode(ctx, pos, scale, status) {
+    ctx.save();
+    let emoji = status === 0 ? "✅" : "⛔";
+    ctx.font = "1em Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(emoji, pos.x, pos.y);
+    ctx.restore();
+}
+
 function drawChannelPacket(packet, ctx, pos) {
     ctx.save();
     const TRANSFORM_SCALE = 12.0 * CANVAS_WIDTH / REFERENCE_WIDTH;
-    if (packet.contentType == 0) { // request
+    if (packet.hasOwnProperty("request")) {
         drawShapeWithStyle(
-            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.content.shape),
-            getStylePattern(ctx, packet.content.writeState));
-    } else if (packet.contentType == 1) { // response
+            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.request.shape),
+            getStylePattern(ctx, packet.request.writeState));
+    } else if (packet.hasOwnProperty("readResponse")) {
         drawShapeWithStyle(
-            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.content.shape),
-            getStylePattern(ctx, packet.content.state));
+            ctx, pos, TRANSFORM_SCALE, getShapePath(packet.readResponse.shape),
+            getStylePattern(ctx, packet.readResponse.state));
+    }else if (packet.hasOwnProperty("writeResponse")) {
+        drawStatusCode(ctx, pos, TRANSFORM_SCALE, packet.writeResponse.status);
     }
-    
     ctx.restore();
 }
 

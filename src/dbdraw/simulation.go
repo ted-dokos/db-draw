@@ -71,15 +71,24 @@ func (r Request) ToJS() js.Value {
 	return js.ValueOf(v)
 }
 
+type StatusCode uint
+
+const (
+	ok StatusCode = iota
+	err
+)
+
 type Response struct {
-	shape Shape
-	state ShapeState
+	shape  Shape
+	state  ShapeState
+	status StatusCode
 }
 
 func (r Response) ToJS() js.Value {
 	return js.ValueOf(map[string]any{
-		"shape": js.ValueOf(uint(r.shape)),
-		"state": js.ValueOf(uint(r.state)),
+		"shape":  js.ValueOf(uint(r.shape)),
+		"state":  js.ValueOf(uint(r.state)),
+		"status": js.ValueOf(uint(r.status)),
 	})
 }
 
@@ -103,10 +112,10 @@ func (d *Database) Data() *DBData {
 
 func (d Database) ReceiveRequest(r Request) Response {
 	if r.reqType == read {
-		return Response{r.shape, ShapeState(d.data[r.shape])}
+		return Response{r.shape, ShapeState(d.data[r.shape]), ok}
 	}
 	d.data[r.shape] = r.writeState
-	return Response{r.shape, ShapeState(d.data[r.shape])}
+	return Response{r.shape, ShapeState(d.data[r.shape]), ok}
 }
 func (d Database) ReceiveResponse(r Response) {}
 func (d *Database) ToJS() js.Value {
@@ -144,6 +153,7 @@ type PacketContentsType uint
 const (
 	request PacketContentsType = iota
 	response
+	writeResponse
 )
 
 type Packet struct {
@@ -153,11 +163,16 @@ type Packet struct {
 }
 
 func (p Packet) ToJS() js.Value {
-	return js.ValueOf(map[string]interface{}{
-		"progress":    js.ValueOf(p.progress),
-		"contentType": js.ValueOf(uint(p.contentType)),
-		"content":     p.contents.ToJS(),
-	})
+	v := map[string]interface{}{"progress": js.ValueOf(p.progress)}
+	switch p.contentType {
+	case request:
+		v["request"] = p.contents.ToJS()
+	case response:
+		v["readResponse"] = p.contents.ToJS()
+	case writeResponse:
+		v["writeResponse"] = p.contents.ToJS()
+	}
+	return js.ValueOf(v)
 }
 
 type Channel struct {
@@ -176,11 +191,11 @@ func (c *Channel) sendRequest(outgoing bool, r Request) {
 		c.incoming = &Packet{0.0, request, &r}
 	}
 }
-func (c *Channel) sendResponse(outgoing bool, r Response) {
+func (c *Channel) sendResponse(outgoing bool, r Response, ty PacketContentsType) {
 	if outgoing {
-		c.outgoing = &Packet{0.0, response, &r}
+		c.outgoing = &Packet{0.0, ty, &r}
 	} else {
-		c.incoming = &Packet{0.0, response, &r}
+		c.incoming = &Packet{0.0, ty, &r}
 	}
 }
 func (c Channel) ToJS() js.Value {
@@ -248,8 +263,13 @@ func Update(s *SimulationState) {
 			}
 			switch (*p).contentType {
 			case request:
-				resp := ep.ReceiveRequest(*(*p).contents.(*Request))
-				ch.sendResponse(!outgoing, resp)
+				req := (*p).contents.(*Request)
+				resp := ep.ReceiveRequest(*req)
+				ty := response
+				if req.reqType == write {
+					ty = writeResponse
+				}
+				ch.sendResponse(!outgoing, resp, ty)
 			case response:
 				ep.ReceiveResponse(*(*p).contents.(*Response))
 			}
