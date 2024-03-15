@@ -22,7 +22,6 @@ func (p Position) scale(s float64) Position {
 	p.y *= s
 	return p
 }
-
 func (p Position) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"x": js.ValueOf(p.x),
@@ -53,22 +52,33 @@ const (
 	write
 )
 
-type Request struct {
-	reqType RequestType
-	shape   Shape
-	// Only used for write requests
+type Request interface {
+	JSable
+	implementsRequest()
+}
+
+type ReadRequest struct {
+	shape Shape
+}
+
+func (r ReadRequest) implementsRequest() {}
+func (r ReadRequest) ToJS() js.Value {
+	return js.ValueOf(map[string]any{
+		"shape": js.ValueOf(uint(r.shape)),
+	})
+}
+
+type WriteRequest struct {
+	shape      Shape
 	writeState ShapeState
 }
 
-func (r Request) ToJS() js.Value {
-	v := map[string]interface{}{
-		"reqType": js.ValueOf(uint(r.reqType)),
-		"shape":   js.ValueOf(uint(r.shape)),
-	}
-	if r.reqType == write {
-		v["writeState"] = js.ValueOf(uint(r.writeState))
-	}
-	return js.ValueOf(v)
+func (w WriteRequest) implementsRequest() {}
+func (w WriteRequest) ToJS() js.Value {
+	return js.ValueOf(map[string]any{
+		"shape":      js.ValueOf(uint(w.shape)),
+		"writeState": js.ValueOf(uint(w.writeState)),
+	})
 }
 
 type StatusCode uint
@@ -78,17 +88,38 @@ const (
 	err
 )
 
-type Response struct {
-	shape  Shape
-	state  ShapeState
-	status StatusCode
+type Response interface {
+	JSable
+	implementsResponse()
 }
 
-func (r Response) ToJS() js.Value {
+type ReadResponse struct {
+	status StatusCode
+	shape  Shape
+	state  ShapeState
+}
+
+func (r ReadResponse) implementsResponse() {}
+func (r ReadResponse) ToJS() js.Value {
 	return js.ValueOf(map[string]any{
 		"shape":  js.ValueOf(uint(r.shape)),
 		"state":  js.ValueOf(uint(r.state)),
 		"status": js.ValueOf(uint(r.status)),
+	})
+}
+
+type WriteResponse struct {
+	status StatusCode
+	shape  Shape
+	state  ShapeState
+}
+
+func (w WriteResponse) implementsResponse() {}
+func (w WriteResponse) ToJS() js.Value {
+	return js.ValueOf(map[string]any{
+		"shape":  js.ValueOf(uint(w.shape)),
+		"state":  js.ValueOf(uint(w.state)),
+		"status": js.ValueOf(uint(w.status)),
 	})
 }
 
@@ -102,20 +133,26 @@ type Endpoint interface {
 type DBData map[Shape]ShapeState
 
 type Database struct {
-	pos  Position
-	data DBData
+	pos    Position
+	data   DBData
+	leader bool
 }
 
 func (d *Database) Data() *DBData {
 	return &d.data
 }
-
 func (d Database) ReceiveRequest(r Request) Response {
-	if r.reqType == read {
-		return Response{r.shape, ShapeState(d.data[r.shape]), ok}
+	switch r.(type) {
+	case ReadRequest:
+		read := r.(ReadRequest)
+		return ReadResponse{ok, read.shape, ShapeState(d.data[read.shape])}
+	case WriteRequest:
+		write := r.(WriteRequest)
+		d.data[write.shape] = write.writeState
+		return WriteResponse{ok, write.shape, ShapeState(d.data[write.shape])}
+	default:
+		panic("Unknown request type")
 	}
-	d.data[r.shape] = r.writeState
-	return Response{r.shape, ShapeState(d.data[r.shape]), ok}
 }
 func (d Database) ReceiveResponse(r Response) {}
 func (d *Database) ToJS() js.Value {
@@ -124,8 +161,9 @@ func (d *Database) ToJS() js.Value {
 		data[shapeNames[shape]] = js.ValueOf(uint(reqType))
 	}
 	return js.ValueOf(map[string]interface{}{
-		"pos":  d.pos.ToJS(),
-		"data": js.ValueOf(data),
+		"pos":    d.pos.ToJS(),
+		"data":   js.ValueOf(data),
+		"leader": js.ValueOf(d.leader),
 	})
 }
 
@@ -136,12 +174,10 @@ type Client struct {
 func (c *Client) Data() *DBData {
 	return nil
 }
-
 func (c Client) ReceiveRequest(r Request) Response {
 	panic("Client::ReceiveRequest is not implemented.")
 }
 func (c Client) ReceiveResponse(r Response) {}
-
 func (c *Client) ToJS() js.Value {
 	return js.ValueOf(map[string]interface{}{
 		"pos": c.pos.ToJS(),
@@ -157,21 +193,26 @@ const (
 )
 
 type Packet struct {
-	progress    float64
-	contentType PacketContentsType
-	contents    JSable
+	progress float64
+	contents JSable
 }
 
 func (p Packet) ToJS() js.Value {
 	v := map[string]interface{}{"progress": js.ValueOf(p.progress)}
-	switch p.contentType {
-	case request:
-		v["request"] = p.contents.ToJS()
-	case response:
-		v["readResponse"] = p.contents.ToJS()
-	case writeResponse:
-		v["writeResponse"] = p.contents.ToJS()
+	key := ""
+	switch p.contents.(type) {
+	case ReadRequest:
+		key = "readRequest"
+	case WriteRequest:
+		key = "writeRequest"
+	case ReadResponse:
+		key = "readResponse"
+	case WriteResponse:
+		key = "writeResponse"
+	default:
+		panic("Unexpected packet contents.")
 	}
+	v[key] = p.contents.ToJS()
 	return js.ValueOf(v)
 }
 
@@ -186,24 +227,24 @@ type Channel struct {
 
 func (c *Channel) sendRequest(outgoing bool, r Request) {
 	if outgoing {
-		c.outgoing = &Packet{0.0, request, &r}
+		c.outgoing = &Packet{0.0, r}
 	} else {
-		c.incoming = &Packet{0.0, request, &r}
+		c.incoming = &Packet{0.0, r}
 	}
 }
-func (c *Channel) sendResponse(outgoing bool, r Response, ty PacketContentsType) {
+func (c *Channel) sendResponse(outgoing bool, r Response) {
 	if outgoing {
-		c.outgoing = &Packet{0.0, ty, &r}
+		c.outgoing = &Packet{0.0, r}
 	} else {
-		c.incoming = &Packet{0.0, ty, &r}
+		c.incoming = &Packet{0.0, r}
 	}
 }
 func (c Channel) ToJS() js.Value {
-	maybe_packet := func(t *Packet) js.Value {
-		if t == nil {
+	maybe_packet := func(p *Packet) js.Value {
+		if p == nil {
 			return js.Null()
 		}
-		return t.ToJS()
+		return p.ToJS()
 	}
 	return js.ValueOf(map[string]interface{}{
 		"ep1":         c.ep1.ToJS(),
@@ -214,68 +255,83 @@ func (c Channel) ToJS() js.Value {
 	})
 }
 
-type SimulationState struct {
+type Simulation struct {
 	tick      uint
 	databases []Database
 	clients   []Client
 	channels  []Channel
 	events    EventEmitter
+	active    bool
 }
 
-func (s SimulationState) ToJS() js.Value {
-	dbs := make([]interface{}, len(s.databases))
+func (s *Simulation) Activate() {
+	s.active = true
+}
+func (s *Simulation) Deactivate() {
+	s.active = false
+}
+func (s Simulation) ToJS() js.Value {
+	dbs := make([]any, len(s.databases))
 	for i := 0; i < len(s.databases); i++ {
 		dbs[i] = s.databases[i].ToJS()
 	}
-	clients := make([]interface{}, len(s.clients))
+	clients := make([]any, len(s.clients))
 	for i := 0; i < len(s.clients); i++ {
 		clients[i] = s.clients[i].ToJS()
 	}
-	channels := make([]interface{}, len(s.channels))
+	channels := make([]any, len(s.channels))
 	for i := 0; i < len(s.channels); i++ {
 		channels[i] = s.channels[i].ToJS()
 	}
-	return js.ValueOf(map[string]interface{}{
+	return js.ValueOf(map[string]any{
 		"databases": js.ValueOf(dbs),
 		"clients":   js.ValueOf(clients),
 		"channels":  js.ValueOf(channels),
+		"active":    js.ValueOf(s.active),
+		"tick":      js.ValueOf(s.tick),
 	})
 }
-
-func Update(s *SimulationState) {
+func Update(s *Simulation) {
+	if !s.active {
+		return
+	}
 	s.tick++
 	s.events.ProcessTick(s.tick)
+	updateDir := func(ch *Channel, outgoing bool) Response {
+		ep := ch.ep1
+		p := &ch.incoming
+		if outgoing {
+			ep = ch.ep2
+			p = &ch.outgoing
+		}
+		if *p == nil {
+			return nil
+		}
+		(*p).progress += TIME_PER_TICK.Seconds() / ch.travelTime
+		if (*p).progress < 1.0 {
+			return nil
+		}
+		var resp Response
+		switch (*p).contents.(type) {
+		case Request:
+			resp = ep.ReceiveRequest((*p).contents.(Request))
+		case Response:
+			ep.ReceiveResponse((*p).contents.(Response))
+		}
+		*p = nil
+		return resp
+	}
+
 	for i := 0; i < len(s.channels); i++ {
 		ch := &s.channels[i]
-		updateDir := func(ch *Channel, outgoing bool) {
-			ep := ch.ep1
-			p := &ch.incoming
-			if outgoing {
-				ep = ch.ep2
-				p = &ch.outgoing
-			}
-			if *p == nil {
-				return
-			}
-			(*p).progress += TIME_PER_TICK.Seconds() / ch.travelTime
-			if (*p).progress < 1.0 {
-				return
-			}
-			switch (*p).contentType {
-			case request:
-				req := (*p).contents.(*Request)
-				resp := ep.ReceiveRequest(*req)
-				ty := response
-				if req.reqType == write {
-					ty = writeResponse
-				}
-				ch.sendResponse(!outgoing, resp, ty)
-			case response:
-				ep.ReceiveResponse(*(*p).contents.(*Response))
-			}
-			*p = nil
+
+		outResp := updateDir(ch, true)
+		inResp := updateDir(ch, false)
+		if outResp != nil {
+			ch.sendResponse(false, outResp)
 		}
-		updateDir(ch, true)
-		updateDir(ch, false)
+		if inResp != nil {
+			ch.sendResponse(true, inResp)
+		}
 	}
 }

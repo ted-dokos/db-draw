@@ -3,9 +3,6 @@
 <head>
 	<link rel="icon" href="data:;base64,=">
 	<meta charset="utf-8" />
-	<script type="importmap">
-			{"imports": {"rxjs": "https://unpkg.com/@esm-bundle/rxjs/esm/es5/rxjs.min.js"}}
-		</script>
 	<script src="src/wasm_exec.js"></script>
 	<script type="module" src="src/patterns.js"></script>
 	<script type="module" src="src/vector.js"></script>
@@ -61,7 +58,7 @@
 		</ul>
 		<h1>Our model</h1>
 		<p>
-			We will start with a simple model for a database.
+			We will start with a simple model for a database, and improve it incrementally.
 			We can envision it as a single server that stores its data in memory.
 			Each client has a channel of communication to the database,
 			and can send read or write requests.
@@ -70,19 +67,24 @@
 	<canvas id="draw" height="500"></canvas>
 	<div class="text">
 		<p>
-			This database is <u>consistent</u>:
-			two identical read requests that arrive at the same time will give identical answers.
+			This database is easy to understand.
+			It is also <u>consistent</u>:
+			two identical read requests that arrive at the same time
+			will give identical answers.
 			However, it has a number of drawbacks:
 		</p>
 		<ol>
 			<li>
 				There is a single point of failure.
-				If the server crashes, all clients are locked out until the server comes back online.
+				If the server crashes,
+				all clients are locked out until the server comes back online.
 			</li>
 			<li>
 				A client might be unable to reach this particular server,
 				intermittently or permanently.
-				A client could also have a slow connection to the server:
+			</li>
+			<li>
+				A client could have a slow connection to the server:
 				a server in America will have long communication times for a client in Asia.
 			</li>
 			<li>
@@ -91,57 +93,72 @@
 			</li>
 			<li>
 				The database is limited by the server memory.
-				A huge database might not fit in RAM or even in disk space.
+				A huge database might not fit in RAM, or even in disk space.
 			</li>
 		</ol>
 		<h1>Appetizer: sharding</h1>
 		<p>
-			Drawback #4 above can be handled by <u>sharding</u> the data.
+			Drawbacks 3 and 5 above can be improved by <u>sharding</u> the data.
 			A large dataset is broken up into manageable chunks,
 			and each chunk is served independently.
+		</p>
+		<p>
+			With sharding,
+			the database can be much larger than a server's memory footprint.
+			We can keep communication times short
+			by strategically locating shards close to interested clients.
 		</p>
 	</div>
 	<canvas id="draw" height="500"></canvas>
 	<div class="text">
 		<p>
-			Sharding introduces complexity around managing data and routing clients.
+			Sharding works well when clients are focused on small subsets of the data.
+			This is often the case in consumer-targeted applications:
+			you care about your photos, and your friends' photos,
+			but not about strangers' photos.
+		</p>
+		<p>
+			Sharding introduces complexity around managing data.
 			If some data is needed by all users,
-			we could replicate the data in each shard,
+			we must replicate the data in each shard,
 			or provide a secondary connection to where that data lives.
-			And a client who cares about circle data won't be happy
+			Sharding also introduces complexity around routing clients properly:
+			a client who cares about circle data won't be happy
 			if they're connected to the square-only database.
 		</p>
 		<p>
-			Sharding works well when clients are focused on small subsets of the data.
-			This is often the case in consumer-targeted applications.
-			Let's see how our examples work with sharding:
+			Let's see how our examples could use sharding:
 		</p>
 		<ul>
 			<li>
-				Photo sharing app: we can store all of a user's owned photos on the same shard,
+				<b>Photo sharing app:</b>
+				we can store all of a user's owned photos on the same shard,
 				unless they have a huge amount of photos.
-				Shared albums usually have a small number of participants and contributors.
-				The participants could also be grouped onto the same shard.
-				However, a shared album with many particiants and many photos could be an issue.
+				We have many possible strategies for implementing shared albums.
+				One simple approach would be to store references to the original images.
+				This saves on data storage,
+				but means that shared album content
+				could be spread across multiple shards.
 			</li>
 			<li>
-				Bank accounts: accounts rarely have more than a few owners,
+				<b>Bank accounts:</b> accounts rarely have more than a few owners,
 				and a user rarely owns more than a few accounts.
 				Grouping connected owners and accounts together
 				should therefore result in small clusters of related data,
 				a good fit for sharding.
 			<li>
-				Streaming services: each client is only watching one video at a time.
+				<b>Streaming services:</b> videos are memory hungry,
+				but each client is only watching one video at a time.
 				Sharding on a per-video basis makes a lot of sense.
 			</li>
 		</ul>
 		<p>
 			Sharding data is a useful trick in the design of systems.
-			It can be applied independently of the next subject, replication.
+			It can be applied in conjunction with replication, the next subject.
 		</p>
 		<h1>Main entree: replication</h1>
 		<p>
-			Drawbacks #1-3 above can all be improved
+			Drawbacks 1, 2, and 4 above can all be improved
 			by <u>replicating</u> the data across multiple servers:
 			<ol>
 				<li>
@@ -151,11 +168,11 @@
 				</li>
 				<li>
 					A client can access the database as long as one replica is reachable.
-					Under normal conditions,
+					<!--Under normal conditions,
 					the client can use the "closest" replica,
-					meaning the one with the shortest travel time for communication.
+					meaning the one with the shortest travel time for communication.-->
 				</li>
-				<li>
+				<li value="4">
 					Client traffic can be split among replicas.
 					A load balancer can direct clients
 					and prevent replicas from becoming overwhelmed.
@@ -166,7 +183,7 @@
 	<canvas id="draw" height="350"></canvas>
 	<div class="text">
 		<p>
-			However, replication is not a simple win.
+			However, replication is not a simple win.	
 			In the above example, every client is only sending read requests.
 			Requests that change the state of the database introduce a challenge:
 			how do we keep the replicas in sync?
@@ -174,6 +191,36 @@
 	</div>
 	<canvas id="draw" height="350"></canvas>
 	<div class="text">
+		<h3>Idea 1: decentralized messaging</h2>
+		<p>
+			We could accept writes from every replica.
+			When a replica receives a change,
+			it notifies the others, and makes them update as well.
+			This idea is alluring,
+			as it's very simple conceptually.
+		</p>
+		<p>
+			Unfortunately, that simplicity comes at a cost.
+			Simultaneous writes to different replicas are enough to cause desync.
+			That doesn't mean this idea is dead, it just needs to be improved.
+			For now, we'll drop it and look at another option.
+		</p>
+	</div>
+	<canvas id="draw" height="350"></canvas>
+	<div class="text">
+		<h3>Idea 2: the leader model</h3>
+		<p>
+			Another approach involves selecting a replica to be the <u>leader</u>.
+			All read and write requests happen via the leader,
+			and the leader tells the other replicas how to update.
+
+		</p>
+	</div>
+	<canvas id="draw" height="700"></canvas>
+	<div class="text">
+		<p>
+			Lorem ipsum
+		</p>
 		<h1>Resources</h1>
 		<ul>
 			<li>

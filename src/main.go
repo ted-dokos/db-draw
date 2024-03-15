@@ -4,9 +4,10 @@
 package main
 
 import (
-	"dbdraw/dbdraw"
 	"syscall/js"
 	"time"
+
+	"main/dbdraw"
 )
 
 //go:wasmimport howdy JsDo
@@ -14,22 +15,35 @@ func JsDo()
 
 func main() {
 	var time_at_prev_tick = time.Now()
-	sims := []dbdraw.SimulationState{dbdraw.Sim1(),
+	sims := []dbdraw.Simulation{
+		dbdraw.Sim1(),
 		dbdraw.Sim2(),
 		dbdraw.Sim3(),
 		dbdraw.Sim4(),
+		dbdraw.Sim5(),
+		dbdraw.Sim6(),
 	}
-	current_sim_idx := 0
 
 	storeInJs := func(this js.Value, args []js.Value) any {
-		return sims[current_sim_idx].ToJS()
+		jsSims := []interface{}{}
+		for _, sim := range sims {
+			jsSims = append(jsSims, sim.ToJS())
+		}
+		return js.ValueOf(jsSims)
 	}
-	setIdx := func(this js.Value, args []js.Value) any {
-		current_sim_idx = args[0].Int()
+	activateSim := func(this js.Value, args []js.Value) any {
+		idx := args[0].Int()
+		sims[idx].Activate()
 		return js.Undefined()
 	}
-	js.Global().Set("callback", js.FuncOf(storeInJs))
-	js.Global().Set("setSimIndex", js.FuncOf(setIdx))
+	disableSim := func(this js.Value, args []js.Value) any {
+		idx := args[0].Int()
+		sims[idx].Deactivate()
+		return js.Undefined()
+	}
+	js.Global().Set("getSims", js.FuncOf(storeInJs))
+	js.Global().Set("activateSim", js.FuncOf(activateSim))
+	js.Global().Set("disableSim", js.FuncOf(disableSim))
 
 	for {
 		time_to_next_tick_truncated := time_at_prev_tick.Add(dbdraw.TIME_PER_TICK).Sub(time.Now()).Truncate(time.Millisecond)
@@ -40,11 +54,9 @@ func main() {
 		time_after_sleep := time.Now()
 		for time_after_sleep.Sub(time_at_prev_tick) > dbdraw.TIME_PER_TICK {
 			time_at_prev_tick = time_at_prev_tick.Add(dbdraw.TIME_PER_TICK)
-			i := current_sim_idx
-			if i < 0 {
-				continue
+			for i := range sims {
+				dbdraw.Update(&sims[i])
 			}
-			dbdraw.Update(&sims[i])
 			JsDo()
 		}
 	}

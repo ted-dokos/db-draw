@@ -79,23 +79,20 @@ func randShapeWithNewStyle(emitter ChannelEmitter) Request {
 	db := ep.Data()
 	shape := randShape(emitter)
 	if db == nil {
-		return Request{
-			reqType:    write,
+		return WriteRequest{
 			shape:      shape,
 			writeState: randState(emitter),
 		}
 	}
 	state, ok := (*db)[shape]
 	if !ok {
-		return Request{
-			reqType:    write,
+		return WriteRequest{
 			shape:      shape,
 			writeState: randState(emitter),
 		}
 	}
 	new := (int(state) + rand.Int()%2 + 1) % 3
-	return Request{
-		reqType:    write,
+	return WriteRequest{
 		shape:      shape,
 		writeState: ShapeState(new),
 	}
@@ -116,8 +113,7 @@ func randState(ChannelEmitter) ShapeState {
 
 func independent(shapeFunc func(ChannelEmitter) Shape, stateFunc func(ChannelEmitter) ShapeState) func(ChannelEmitter) Request {
 	return func(emitter ChannelEmitter) Request {
-		return Request{
-			reqType:    write,
+		return WriteRequest{
 			shape:      shapeFunc(emitter),
 			writeState: stateFunc(emitter),
 		}
@@ -125,15 +121,21 @@ func independent(shapeFunc func(ChannelEmitter) Shape, stateFunc func(ChannelEmi
 }
 
 func randRead(emitter ChannelEmitter) Request {
-	return Request{
-		reqType: read,
-		shape:   randShape(emitter),
+	return ReadRequest{
+		shape: randShape(emitter),
 	}
 }
 
 func randReadOrWrite(emitter ChannelEmitter) Request {
-	return Request{
-		reqType: RequestType(rand.Int() % 2),
-		shape:   randShape(emitter),
+	makeReadReq := rand.Int()%2 == 0
+	if makeReadReq {
+		return ReadRequest{
+			shape: randShape(emitter),
+		}
+	} else {
+		return WriteRequest{
+			shape:      randShape(emitter),
+			writeState: randState(emitter),
+		}
 	}
 }
